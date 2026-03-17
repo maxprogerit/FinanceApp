@@ -41,8 +41,6 @@
     <main class="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Settings</h2>
 
-        <div id="saveMsg" class="hidden mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">Settings saved successfully.</div>
-
         <!-- Appearance -->
         <div class="card mb-6">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Appearance</h3>
@@ -58,9 +56,9 @@
             </div>
         </div>
 
-        <!-- Currency -->
+        <!-- Currency preference -->
         <div class="card mb-6">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Currency</h3>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Display Currency</h3>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Base Currency</label>
                 <select id="baseCurrency" class="form-input w-full max-w-xs">
@@ -74,46 +72,148 @@
                     <option value="CNY">CNY — Chinese Yuan</option>
                     <option value="INR">INR — Indian Rupee</option>
                     <option value="BRL">BRL — Brazilian Real</option>
+                    <option value="RSD">RSD — Serbian Dinar</option>
                 </select>
-                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">All amounts will be displayed in this currency.</p>
+                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                    All monetary amounts will be converted and displayed in this currency.
+                    Stored transaction values are not changed.
+                </p>
             </div>
         </div>
 
-        <!-- Exchange Rates (Mock) -->
+        <!-- Currency Converter -->
         <div class="card mb-6">
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Exchange Rates (vs USD)</h3>
-            <div id="exchangeRates" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                    <p class="text-gray-500 dark:text-gray-400">EUR</p>
-                    <p class="font-semibold text-gray-900 dark:text-white">0.9234</p>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">Currency Converter</h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Uses live exchange rates (updates hourly).</p>
+
+            <div class="flex flex-col sm:flex-row gap-3 items-end">
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Amount</label>
+                    <input type="number" id="converterAmount" class="form-input w-full" placeholder="100" min="0" step="any"
+                           oninput="doConvert()">
                 </div>
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                    <p class="text-gray-500 dark:text-gray-400">GBP</p>
-                    <p class="font-semibold text-gray-900 dark:text-white">0.7891</p>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">From</label>
+                    <select id="converterFrom" class="form-input" onchange="doConvert()">
+                        <!-- Populated by JS -->
+                    </select>
                 </div>
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                    <p class="text-gray-500 dark:text-gray-400">JPY</p>
-                    <p class="font-semibold text-gray-900 dark:text-white">149.52</p>
-                </div>
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                    <p class="text-gray-500 dark:text-gray-400">CAD</p>
-                    <p class="font-semibold text-gray-900 dark:text-white">1.3612</p>
-                </div>
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                    <p class="text-gray-500 dark:text-gray-400">AUD</p>
-                    <p class="font-semibold text-gray-900 dark:text-white">1.5243</p>
-                </div>
-                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
-                    <p class="text-gray-500 dark:text-gray-400">INR</p>
-                    <p class="font-semibold text-gray-900 dark:text-white">83.12</p>
+                <div class="text-2xl text-gray-400 pb-2 hidden sm:block">→</div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">To</label>
+                    <select id="converterTo" class="form-input" onchange="doConvert()">
+                        <!-- Populated by JS -->
+                    </select>
                 </div>
             </div>
-            <p class="mt-3 text-xs text-gray-400">Rates are approximate and updated periodically.</p>
+
+            <div id="converterResult" class="mt-4 p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg hidden">
+                <p id="converterOutput" class="text-xl font-bold text-indigo-700 dark:text-indigo-300"></p>
+                <p id="converterRate"   class="text-xs text-gray-500 dark:text-gray-400 mt-1"></p>
+            </div>
+        </div>
+
+        <!-- Live Exchange Rates -->
+        <div class="card mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Live Exchange Rates (vs USD)</h3>
+                <span id="ratesStatus" class="text-xs text-gray-400 dark:text-gray-500">Loading…</span>
+            </div>
+            <div id="exchangeRatesGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                <!-- Populated by JS -->
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 animate-pulse h-14"></div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 animate-pulse h-14"></div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 animate-pulse h-14"></div>
+            </div>
         </div>
 
         <!-- Save Button -->
-        <button onclick="saveSettings()" class="btn-primary px-8">Save Settings</button>
+        <div class="flex gap-3">
+            <button onclick="saveSettings()" class="btn-primary px-8">Save Settings</button>
+            <button onclick="recalculateBudgets()" class="btn-secondary px-6" title="Recompute all budget spent amounts from actual transactions">
+                Recalculate Budgets
+            </button>
+        </div>
+
+        <!-- Storage Types Management -->
+        <div class="card mt-8">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">💳 Storage Types</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Manage where you hold your money</p>
+                </div>
+                <button onclick="showAddStorageTypeModal()" class="btn-primary text-sm px-4 py-1.5">+ Add Type</button>
+            </div>
+            <div id="storageTypesList" class="space-y-2">
+                <p class="text-gray-400 text-sm">Loading...</p>
+            </div>
+        </div>
+
+        <!-- Income Sources Management -->
+        <div class="card mt-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">📈 Income Sources</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Manage categories for your income</p>
+                </div>
+                <button onclick="showAddIncomeSourceModal()" class="btn-primary text-sm px-4 py-1.5">+ Add Source</button>
+            </div>
+            <div id="incomeSourcesList" class="space-y-2">
+                <p class="text-gray-400 text-sm">Loading...</p>
+            </div>
+        </div>
+
     </main>
+
+    <!-- Storage Type Modal -->
+    <div id="storageTypeModal" class="modal hidden">
+        <div class="modal-content max-w-sm">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="storageTypeModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Add Storage Type</h3>
+                <button onclick="closeStorageTypeModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <input type="hidden" id="storageTypeId">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                    <input type="text" id="storageTypeName" class="form-input w-full" placeholder="e.g. PayPal" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icon (emoji)</label>
+                    <input type="text" id="storageTypeIcon" class="form-input w-full" placeholder="e.g. 💳">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button onclick="closeStorageTypeModal()" class="btn-secondary">Cancel</button>
+                <button onclick="saveStorageType()" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Income Source Modal -->
+    <div id="incomeSourceModal" class="modal hidden">
+        <div class="modal-content max-w-sm">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="incomeSourceModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Add Income Source</h3>
+                <button onclick="closeIncomeSourceModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <input type="hidden" id="incomeSourceId">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                    <input type="text" id="incomeSourceName" class="form-input w-full" placeholder="e.g. Rental Income" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icon (emoji)</label>
+                    <input type="text" id="incomeSourceIcon" class="form-input w-full" placeholder="e.g. 🏠">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button onclick="closeIncomeSourceModal()" class="btn-secondary">Cancel</button>
+                <button onclick="saveIncomeSource()" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/js/theme.js"></script>
     <script src="/js/app.js"></script>

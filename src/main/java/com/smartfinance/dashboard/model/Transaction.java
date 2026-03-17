@@ -40,7 +40,11 @@ public class Transaction {
     private String recurringFrequency; // DAILY, WEEKLY, MONTHLY, YEARLY
     
     private String tags;
-    
+
+    private String storageType;
+
+    private String incomeSource;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

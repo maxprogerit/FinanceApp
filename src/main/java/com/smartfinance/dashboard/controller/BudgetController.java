@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/budgets")
@@ -40,6 +41,12 @@ public class BudgetController {
     @GetMapping
     public ResponseEntity<List<Budget>> getAllBudgets() {
         return ResponseEntity.ok(budgetService.getAllBudgets());
+    }
+
+    @PostMapping("/recalculate")
+    public ResponseEntity<Map<String, Object>> recalculate() {
+        int count = budgetService.recalculateAllBudgetSpending();
+        return ResponseEntity.ok(Map.of("recalculated", count, "message", count + " budget(s) recalculated."));
     }
     
     @GetMapping("/active")

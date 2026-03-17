@@ -1,6 +1,6 @@
 // Budgets JavaScript — Smart Finance Dashboard
-// NOTE: formatCurrency, apiGet, apiPost, apiPut, apiDelete,
-//       showSuccess, showError are provided by app.js
+// NOTE: formatCurrency, convertAmount, currentCurrency, apiGet, apiPost, apiPut,
+//       apiDelete, showSuccess, showError, setLoading are provided by app.js
 
 function firstDayOfMonth() {
     const now = new Date();
@@ -12,8 +12,39 @@ function lastDayOfMonth() {
     return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
 }
 
+// ── Category loading ──────────────────────────────────────────────────────────
+async function loadCategoriesForSelect(selectedValue = '') {
+    const select = document.getElementById('budgetCategory');
+    try {
+        const cats = await apiGet('/categories/active');
+        // Only show EXPENSE categories (budgets are for spending)
+        const expense = cats.filter(c => !c.type || c.type === 'EXPENSE');
+        select.innerHTML = '<option value="">Select category</option>';
+        expense.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat.name;
+            opt.textContent = `${cat.icon || ''} ${cat.name}`.trim();
+            if (cat.name === selectedValue) opt.selected = true;
+            select.appendChild(opt);
+        });
+    } catch (_) {
+        select.innerHTML = '<option value="">Could not load — type manually</option>';
+        // Fallback: let user type
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'budgetCategory';
+        input.className = 'form-input w-full';
+        input.required = true;
+        input.placeholder = 'e.g. Food & Dining';
+        input.value = selectedValue;
+        select.replaceWith(input);
+    }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     loadBudgets();
+    loadCategoriesForSelect();
 
     document.getElementById('budgetForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -22,12 +53,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const id = document.getElementById('budgetId').value;
         const budget = {
-            category: document.getElementById('budgetCategory').value,
+            category:    document.getElementById('budgetCategory').value,
             limitAmount: parseFloat(document.getElementById('budgetLimit').value),
-            startDate: document.getElementById('budgetStartDate').value,
-            endDate: document.getElementById('budgetEndDate').value,
-            period: 'MONTHLY',
-            currency: 'USD'
+            startDate:   document.getElementById('budgetStartDate').value,
+            endDate:     document.getElementById('budgetEndDate').value,
+            period:      'MONTHLY',
+            currency:    currentCurrency || 'USD',
         };
 
         try {
@@ -48,6 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// ── Data loading ──────────────────────────────────────────────────────────────
 async function loadBudgets() {
     try {
         const budgets = await apiGet('/budgets');
@@ -63,6 +95,7 @@ function renderBudgets(budgets) {
 
     if (!budgets.length) {
         container.innerHTML = `<div class="card text-center text-gray-500 dark:text-gray-400 py-12">
+            <p class="text-5xl mb-4">💰</p>
             <p class="text-lg">No budgets yet. Create one to start tracking your spending limits.</p>
         </div>`;
         updateSummary(0, 0);
@@ -71,27 +104,34 @@ function renderBudgets(budgets) {
 
     budgets.forEach(b => {
         totalBudget += parseFloat(b.limitAmount || 0);
-        totalSpent += parseFloat(b.spentAmount || 0);
+        totalSpent  += parseFloat(b.spentAmount  || 0);
     });
     updateSummary(totalBudget, totalSpent);
 
     container.innerHTML = budgets.map(b => {
-        const limit = parseFloat(b.limitAmount || 0);
-        const spent = parseFloat(b.spentAmount || 0);
-        const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
+        const limit     = parseFloat(b.limitAmount || 0);
+        const spent     = parseFloat(b.spentAmount  || 0);
         const remaining = limit - spent;
-        const isOver = spent > limit;
-        const barColor = isOver ? 'bg-red-500' : pct > 80 ? 'bg-yellow-500' : 'bg-green-500';
+        const pct       = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
+        const isOver    = spent > limit;
+        const barColor  = isOver ? 'bg-red-500' : pct > 80 ? 'bg-yellow-500' : 'bg-green-500';
+        const statusBadge = isOver
+            ? '<span class="px-2 py-0.5 rounded-full text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">Over Budget</span>'
+            : pct > 80
+            ? '<span class="px-2 py-0.5 rounded-full text-xs bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300">Warning</span>'
+            : '<span class="px-2 py-0.5 rounded-full text-xs bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">On Track</span>';
         const dateRange = b.startDate ? `${b.startDate} → ${b.endDate}` : '';
+        const budgetCurrency = b.currency || 'USD';
 
         return `
         <div class="card">
             <div class="flex justify-between items-start mb-3">
-                <div>
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200">
                         ${b.category}
                     </span>
-                    <span class="ml-2 text-xs text-gray-500 dark:text-gray-400">${dateRange}</span>
+                    ${statusBadge}
+                    <span class="text-xs text-gray-500 dark:text-gray-400">${dateRange}</span>
                 </div>
                 <div class="flex space-x-2">
                     <button onclick="editBudget(${b.id})" class="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 px-2 py-1 border border-indigo-300 rounded">Edit</button>
@@ -99,15 +139,17 @@ function renderBudgets(budgets) {
                 </div>
             </div>
             <div class="flex justify-between text-sm mb-2">
-                <span class="text-gray-600 dark:text-gray-400">Spent: <strong class="text-gray-900 dark:text-white">${formatCurrency(spent)}</strong></span>
-                <span class="text-gray-600 dark:text-gray-400">Limit: <strong class="text-gray-900 dark:text-white">${formatCurrency(limit)}</strong></span>
+                <span class="text-gray-600 dark:text-gray-400">Spent: <strong class="text-gray-900 dark:text-white">${formatCurrency(spent, budgetCurrency)}</strong></span>
+                <span class="text-gray-600 dark:text-gray-400">Limit: <strong class="text-gray-900 dark:text-white">${formatCurrency(limit, budgetCurrency)}</strong></span>
             </div>
             <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 mb-2">
                 <div class="${barColor} h-3 rounded-full transition-all duration-500" style="width: ${pct}%"></div>
             </div>
             <div class="flex justify-between text-xs">
                 <span class="${isOver ? 'text-red-600 font-semibold' : 'text-gray-500 dark:text-gray-400'}">
-                    ${isOver ? 'Over budget by ' + formatCurrency(spent - limit) : 'Remaining: ' + formatCurrency(remaining)}
+                    ${isOver
+                        ? 'Over by ' + formatCurrency(spent - limit, budgetCurrency)
+                        : 'Remaining: ' + formatCurrency(remaining, budgetCurrency)}
                 </span>
                 <span class="text-gray-500 dark:text-gray-400">${pct.toFixed(1)}%</span>
             </div>
@@ -116,18 +158,21 @@ function renderBudgets(budgets) {
 }
 
 function updateSummary(totalBudget, totalSpent) {
-    document.getElementById('totalBudget').textContent = formatCurrency(totalBudget);
-    document.getElementById('totalSpent').textContent = formatCurrency(totalSpent);
+    document.getElementById('totalBudget').textContent    = formatCurrency(totalBudget);
+    document.getElementById('totalSpent').textContent     = formatCurrency(totalSpent);
     document.getElementById('totalRemaining').textContent = formatCurrency(Math.max(totalBudget - totalSpent, 0));
 }
 
+// ── Modal helpers ─────────────────────────────────────────────────────────────
 function openBudgetModal(budget = null) {
     document.getElementById('budgetModalTitle').textContent = budget ? 'Edit Budget' : 'Add Budget';
-    document.getElementById('budgetId').value = budget?.id || '';
-    document.getElementById('budgetCategory').value = budget?.category || '';
-    document.getElementById('budgetLimit').value = budget?.limitAmount || '';
-    document.getElementById('budgetStartDate').value = budget?.startDate || firstDayOfMonth();
-    document.getElementById('budgetEndDate').value = budget?.endDate || lastDayOfMonth();
+    document.getElementById('budgetId').value         = budget?.id || '';
+    document.getElementById('budgetLimit').value      = budget?.limitAmount || '';
+    document.getElementById('budgetStartDate').value  = budget?.startDate || firstDayOfMonth();
+    document.getElementById('budgetEndDate').value    = budget?.endDate   || lastDayOfMonth();
+
+    // Re-load categories and set selected value
+    loadCategoriesForSelect(budget?.category || '');
     document.getElementById('budgetModal').classList.remove('hidden');
 }
 

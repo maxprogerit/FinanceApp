@@ -151,6 +151,38 @@
             </div>
         </div>
 
+        <!-- Money Distribution Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Storage Distribution -->
+            <div class="card">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-1">💳 Money Storage Distribution</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Current balance by storage location (income − expenses)</p>
+                <div id="storageChartWrap"><canvas id="storageChart"></canvas></div>
+            </div>
+
+            <!-- Income Sources -->
+            <div class="card">
+                <div class="flex flex-wrap justify-between items-center mb-1 gap-2">
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">📈 Income Sources</h3>
+                    <div class="flex gap-2">
+                        <select id="incomeSourceMonth" class="form-input text-sm py-1">
+                            <option value="1">Jan</option><option value="2">Feb</option>
+                            <option value="3">Mar</option><option value="4">Apr</option>
+                            <option value="5">May</option><option value="6">Jun</option>
+                            <option value="7">Jul</option><option value="8">Aug</option>
+                            <option value="9">Sep</option><option value="10">Oct</option>
+                            <option value="11">Nov</option><option value="12">Dec</option>
+                        </select>
+                        <select id="incomeSourceYear" class="form-input text-sm py-1">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Percentage of income by source for selected period</p>
+                <div id="incomeSourceChartWrap"><canvas id="incomeSourceChart"></canvas></div>
+            </div>
+        </div>
+
         <!-- AI Insights -->
         <div class="card mb-8">
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">💡 AI Financial Insights</h3>

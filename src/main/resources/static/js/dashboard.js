@@ -3,6 +3,8 @@
 
 let incomeExpensesChartInstance = null;
 let categoryChartInstance = null;
+let storageChartInstance = null;
+let incomeSourceChartInstance = null;
 
 async function loadDashboard() {
     try {
@@ -22,6 +24,8 @@ async function loadDashboard() {
         loadBudgetStatus(analytics.activeBudgets || []);
         loadNotifications();
         loadRecentTransactions();
+        loadStorageChart();
+        loadIncomeSourceChart();
     } catch (e) {
         showError('Failed to load dashboard data.');
     }
@@ -240,6 +244,107 @@ async function loadNotifications() {
     }
 }
 
+async function loadStorageChart() {
+    const wrap = document.getElementById('storageChartWrap');
+    if (!wrap) return;
+    try {
+        const data = await apiGet('/analytics/storage-distribution');
+        const entries = Object.entries(data).filter(([, v]) => v > 0);
+
+        if (entries.length === 0) {
+            wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">💳</div><p>No storage data yet. Add transactions with a storage type!</p></div>`;
+            return;
+        }
+
+        wrap.innerHTML = '<canvas id="storageChart"></canvas>';
+        const ctx = document.getElementById('storageChart').getContext('2d');
+        if (storageChartInstance) storageChartInstance.destroy();
+
+        const COLORS = ['#6366F1','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#84CC16','#F97316'];
+        storageChartInstance = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: entries.map(([k]) => k),
+                datasets: [{
+                    data: entries.map(([, v]) => v),
+                    backgroundColor: COLORS.slice(0, entries.length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'right' },
+                    tooltip: {
+                        callbacks: {
+                            label: c => ` ${c.label}: ${formatCurrency(c.raw)} (${c.parsed.toFixed(1)}%)`
+                        }
+                    }
+                }
+            }
+        });
+    } catch (e) {
+        console.error('Error loading storage chart:', e);
+    }
+}
+
+async function loadIncomeSourceChart(month, year) {
+    const wrap = document.getElementById('incomeSourceChartWrap');
+    if (!wrap) return;
+
+    const now = new Date();
+    const m = month || now.getMonth() + 1;
+    const y = year  || now.getFullYear();
+
+    try {
+        const data = await apiGet(`/analytics/income-sources?month=${m}&year=${y}`);
+        const entries = Object.entries(data).filter(([, v]) => v > 0);
+
+        if (entries.length === 0) {
+            wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📈</div><p>No income source data for this period.</p></div>`;
+            return;
+        }
+
+        wrap.innerHTML = '<canvas id="incomeSourceChart"></canvas>';
+        const ctx = document.getElementById('incomeSourceChart').getContext('2d');
+        if (incomeSourceChartInstance) incomeSourceChartInstance.destroy();
+
+        const total = entries.reduce((s, [, v]) => s + v, 0);
+        const COLORS = ['#10B981','#6366F1','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#84CC16','#F97316'];
+        incomeSourceChartInstance = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: entries.map(([k]) => k),
+                datasets: [{
+                    data: entries.map(([, v]) => v),
+                    backgroundColor: COLORS.slice(0, entries.length),
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'right' },
+                    tooltip: {
+                        callbacks: {
+                            label: c => {
+                                const pct = total > 0 ? (c.raw / total * 100).toFixed(1) : 0;
+                                return ` ${c.label}: ${formatCurrency(c.raw)} (${pct}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } catch (e) {
+        console.error('Error loading income source chart:', e);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const notificationBtn   = document.getElementById('notificationBtn');
     const notificationPanel = document.getElementById('notificationPanel');
@@ -270,4 +375,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loadDashboard();
     setInterval(loadDashboard, 300_000);
+
+    // Populate year select and wire income source filters
+    const yearSelect = document.getElementById('incomeSourceYear');
+    if (yearSelect) {
+        const now = new Date();
+        for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            if (y === now.getFullYear()) opt.selected = true;
+            yearSelect.appendChild(opt);
+        }
+    }
+    const monthSelect = document.getElementById('incomeSourceMonth');
+    if (monthSelect) {
+        monthSelect.value = new Date().getMonth() + 1;
+        monthSelect.addEventListener('change', () => {
+            loadIncomeSourceChart(+monthSelect.value, +document.getElementById('incomeSourceYear').value);
+        });
+    }
+    if (yearSelect) {
+        yearSelect.addEventListener('change', () => {
+            loadIncomeSourceChart(+document.getElementById('incomeSourceMonth').value, +yearSelect.value);
+        });
+    }
 });

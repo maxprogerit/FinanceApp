@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -34,5 +35,20 @@ public class AnalyticsController {
     @GetMapping("/insights")
     public ResponseEntity<List<String>> getFinancialInsights() {
         return ResponseEntity.ok(analyticsService.generateFinancialInsights());
+    }
+
+    @GetMapping("/storage-distribution")
+    public ResponseEntity<Map<String, Double>> getStorageDistribution() {
+        return ResponseEntity.ok(analyticsService.getStorageDistribution());
+    }
+
+    @GetMapping("/income-sources")
+    public ResponseEntity<Map<String, Double>> getIncomeSources(
+            @RequestParam(defaultValue = "0") int month,
+            @RequestParam(defaultValue = "0") int year) {
+        LocalDateTime now = LocalDateTime.now();
+        int m = month > 0 ? month : now.getMonthValue();
+        int y = year  > 0 ? year  : now.getYear();
+        return ResponseEntity.ok(analyticsService.getIncomeBySource(m, y));
     }
 }

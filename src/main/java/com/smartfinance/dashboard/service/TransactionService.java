@@ -48,7 +48,9 @@ public class TransactionService {
         existing.setIsRecurring(transaction.getIsRecurring());
         existing.setRecurringFrequency(transaction.getRecurringFrequency());
         existing.setTags(transaction.getTags());
-        
+        existing.setStorageType(transaction.getStorageType());
+        existing.setIncomeSource(transaction.getIncomeSource());
+
         Transaction updated = transactionRepository.save(existing);
         
         // Update budgets if amounts or categories changed

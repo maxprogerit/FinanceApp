@@ -1,5 +1,6 @@
 package com.smartfinance.dashboard.service;
 
+import com.smartfinance.dashboard.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -13,16 +14,17 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AnalyticsService {
-    
+
     private final TransactionService transactionService;
     private final BudgetService budgetService;
     private final InvestmentService investmentService;
+    private final TransactionRepository transactionRepository;
     
     public Map<String, Object> getDashboardAnalytics() {
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime endOfMonth = now.withDayOfMonth(now.toLocalDate().lengthOfMonth())
-                .withHour(23).withMinute(59).withSecond(59);
+                .withHour(23).withMinute(59).withSecond(59).withNano(999999999);
         
         Map<String, Object> analytics = new HashMap<>();
         
@@ -84,9 +86,9 @@ public class AnalyticsService {
     
     public Map<String, Object> getCategoryAnalysis() {
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime endOfMonth = now.withDayOfMonth(now.toLocalDate().lengthOfMonth())
-                .withHour(23).withMinute(59).withSecond(59);
+                .withHour(23).withMinute(59).withSecond(59).withNano(999999999);
         
         Map<String, BigDecimal> expensesByCategory = transactionService.getExpensesByCategory(startOfMonth, endOfMonth);
         BigDecimal totalExpenses = transactionService.getTotalExpensesForPeriod(startOfMonth, endOfMonth);
@@ -122,10 +124,10 @@ public class AnalyticsService {
         List<String> insights = new ArrayList<>();
         
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime endOfMonth = now.withDayOfMonth(now.toLocalDate().lengthOfMonth())
-                .withHour(23).withMinute(59).withSecond(59);
-        
+                .withHour(23).withMinute(59).withSecond(59).withNano(999999999);
+
         BigDecimal totalIncome = transactionService.getTotalIncomeForPeriod(startOfMonth, endOfMonth);
         BigDecimal totalExpenses = transactionService.getTotalExpensesForPeriod(startOfMonth, endOfMonth);
         Map<String, BigDecimal> expensesByCategory = transactionService.getExpensesByCategory(startOfMonth, endOfMonth);
@@ -178,5 +180,40 @@ public class AnalyticsService {
         }
         
         return insights;
+    }
+
+    public Map<String, Double> getStorageDistribution() {
+        List<Object[]> incomeData   = transactionRepository.sumIncomeByStorageType();
+        List<Object[]> expenseData  = transactionRepository.sumExpensesByStorageType();
+
+        Map<String, Double> result = new HashMap<>();
+
+        for (Object[] row : incomeData) {
+            String type   = (String)     row[0];
+            double amount = ((BigDecimal) row[1]).doubleValue();
+            result.merge(type, amount, Double::sum);
+        }
+        for (Object[] row : expenseData) {
+            String type   = (String)     row[0];
+            double amount = ((BigDecimal) row[1]).doubleValue();
+            result.merge(type, -amount, Double::sum);
+        }
+        return result;
+    }
+
+    public Map<String, Double> getIncomeBySource(int month, int year) {
+        YearMonth ym = YearMonth.of(year, month);
+        LocalDateTime start = ym.atDay(1).atStartOfDay();
+        LocalDateTime end   = ym.atEndOfMonth().atTime(23, 59, 59, 999_999_999);
+
+        List<Object[]> data  = transactionRepository.getIncomeBySourceForPeriod(start, end);
+        Map<String, Double> result = new LinkedHashMap<>();
+
+        for (Object[] row : data) {
+            String source = (String)     row[0];
+            double amount = ((BigDecimal) row[1]).doubleValue();
+            result.put(source, amount);
+        }
+        return result;
     }
 }

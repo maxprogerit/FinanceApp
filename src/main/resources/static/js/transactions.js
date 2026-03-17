@@ -5,6 +5,8 @@
 let currentTransactionId = null;
 let allTransactions = [];
 let categories = [];
+let storageTypes = [];
+let incomeSources = [];
 
 function formatDateForInput(dateString) {
     return new Date(dateString).toISOString().slice(0, 16);
@@ -38,9 +40,61 @@ function populateCategorySelects() {
     }
 }
 
+async function loadStorageTypes() {
+    try {
+        storageTypes = await apiGet('/storage-types');
+        populateStorageTypeSelect();
+    } catch (error) {
+        console.error('Error loading storage types:', error);
+    }
+}
+
+function populateStorageTypeSelect(selectedValue = '') {
+    const select = document.getElementById('storageType');
+    if (!select) return;
+    const prev = selectedValue || select.value;
+    select.innerHTML = '<option value="">— None / Not specified —</option>';
+    storageTypes.forEach(st => {
+        const opt = document.createElement('option');
+        opt.value = st.name;
+        opt.textContent = `${st.icon || ''} ${st.name}`.trim();
+        if (st.name === prev) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
+async function loadIncomeSources() {
+    try {
+        incomeSources = await apiGet('/income-sources');
+        populateIncomeSourceSelect();
+    } catch (error) {
+        console.error('Error loading income sources:', error);
+    }
+}
+
+function populateIncomeSourceSelect(selectedValue = '') {
+    const select = document.getElementById('incomeSource');
+    if (!select) return;
+    const prev = selectedValue || select.value;
+    select.innerHTML = '<option value="">— None / Not specified —</option>';
+    incomeSources.forEach(src => {
+        const opt = document.createElement('option');
+        opt.value = src.name;
+        opt.textContent = `${src.icon || ''} ${src.name}`.trim();
+        if (src.name === prev) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
+function toggleIncomeSourceField() {
+    const type = document.getElementById('type').value;
+    const field = document.getElementById('incomeSourceField');
+    if (field) field.classList.toggle('hidden', type !== 'INCOME');
+}
+
 async function loadTransactions() {
     const tableBody = document.getElementById('transactionsTable');
-    tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-gray-400">Loading...</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">Loading...</td></tr>`;
     try {
         allTransactions = await apiGet('/transactions');
         allTransactions.sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
@@ -57,7 +111,7 @@ function displayTransactions(transactions) {
     if (transactions.length === 0) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="6" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                <td colspan="7" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     No transactions found. Click "Add Transaction" to get started!
                 </td>
             </tr>
@@ -71,6 +125,9 @@ function displayTransactions(transactions) {
 
         const typeClass = transaction.type === 'INCOME' ? 'text-green-600' : 'text-red-600';
         const typeSign = transaction.type === 'INCOME' ? '+' : '-';
+        const storageLabel = transaction.storageType
+            ? `<span class="text-xs bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">${transaction.storageType}</span>`
+            : '<span class="text-gray-400 text-xs">—</span>';
 
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
@@ -83,6 +140,9 @@ function displayTransactions(transactions) {
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
                 ${transaction.category}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                ${storageLabel}
             </td>
             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-300">
                 ${transaction.description || '-'}
@@ -108,6 +168,9 @@ function showModal(isEdit = false) {
         document.getElementById('transactionForm').reset();
         document.getElementById('transactionId').value = '';
         document.getElementById('transactionDate').value = new Date().toISOString().slice(0, 16);
+        populateStorageTypeSelect('');
+        populateIncomeSourceSelect('');
+        toggleIncomeSourceField();
     }
 }
 
@@ -129,6 +192,10 @@ async function editTransaction(id) {
         document.getElementById('description').value = transaction.description || '';
         document.getElementById('transactionDate').value = formatDateForInput(transaction.transactionDate);
         document.getElementById('isRecurring').checked = transaction.isRecurring;
+
+        populateStorageTypeSelect(transaction.storageType || '');
+        populateIncomeSourceSelect(transaction.incomeSource || '');
+        toggleIncomeSourceField();
 
         if (transaction.isRecurring) {
             document.getElementById('recurringOptions').classList.remove('hidden');
@@ -157,8 +224,9 @@ async function saveTransaction(event) {
     const submitBtn = event.target.querySelector('[type="submit"]');
     setLoading(submitBtn, true);
 
+    const typeVal = document.getElementById('type').value;
     const transaction = {
-        type: document.getElementById('type').value,
+        type: typeVal,
         amount: parseFloat(document.getElementById('amount').value),
         currency: document.getElementById('currency').value,
         category: document.getElementById('category').value,
@@ -167,6 +235,10 @@ async function saveTransaction(event) {
         isRecurring: document.getElementById('isRecurring').checked,
         recurringFrequency: document.getElementById('isRecurring').checked
             ? document.getElementById('recurringFrequency').value
+            : null,
+        storageType: document.getElementById('storageType').value || null,
+        incomeSource: (typeVal === 'INCOME')
+            ? (document.getElementById('incomeSource').value || null)
             : null
     };
 
@@ -246,12 +318,16 @@ async function exportToCSV() {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadCategories();
+    loadStorageTypes();
+    loadIncomeSources();
     loadTransactions();
 
     document.getElementById('addTransactionBtn').addEventListener('click', () => showModal(false));
     document.getElementById('closeModal').addEventListener('click', hideModal);
     document.getElementById('cancelBtn').addEventListener('click', hideModal);
     document.getElementById('transactionForm').addEventListener('submit', saveTransaction);
+
+    document.getElementById('type').addEventListener('change', toggleIncomeSourceField);
 
     document.getElementById('isRecurring').addEventListener('change', (e) => {
         document.getElementById('recurringOptions').classList.toggle('hidden', !e.target.checked);
