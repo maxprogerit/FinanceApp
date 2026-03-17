@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics — Smart Finance Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+
+    <nav class="bg-white dark:bg-gray-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <h1 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">💰 Smart Finance</h1>
+                    </div>
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                        <a href="/dashboard" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</a>
+                        <a href="/transactions" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Transactions</a>
+                        <a href="/budgets" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Budgets</a>
+                        <a href="/investments" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Investments</a>
+                        <a href="/goals" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Goals</a>
+                        <a href="/reports" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Reports</a>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/settings" class="text-sm text-gray-600 dark:text-gray-300 hover:text-indigo-600">Settings</a>
+                    <button id="themeToggle" class="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <svg id="themeIcon" class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                    </button>
+                    <a href="/logout" class="text-sm text-red-500 hover:text-red-700">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Financial Analytics</h2>
+
+        <!-- Category Breakdown -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="card">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Spending by Category</h3>
+                <canvas id="categoryPieChart"></canvas>
+            </div>
+            <div class="card">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Income vs Expenses (6 Months)</h3>
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- AI Insights -->
+        <div class="card mb-8">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">💡 AI Financial Insights</h3>
+            <div id="insightsList" class="space-y-3">
+                <p class="text-gray-500 dark:text-gray-400">Loading insights...</p>
+            </div>
+        </div>
+
+        <!-- Category Summary Table -->
+        <div class="card">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Category Breakdown</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-200 dark:border-gray-700">
+                            <th class="text-left py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Category</th>
+                            <th class="text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Total Spent</th>
+                            <th class="text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">% of Expenses</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoryTableBody">
+                        <tr><td colspan="3" class="text-center py-6 text-gray-400">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+    const API_BASE = '/api';
+    function fc(v) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v || 0); }
+
+    async function loadAnalytics() {
+        try {
+            const [catRes, trendRes, insightRes] = await Promise.all([
+                fetch(`${API_BASE}/analytics/categories`),
+                fetch(`${API_BASE}/analytics/trends?months=6`),
+                fetch(`${API_BASE}/analytics/insights`)
+            ]);
+            const catData = await catRes.json();
+            const trendData = await trendRes.json();
+            const insights = await insightRes.json();
+            renderCategoryChart(catData);
+            renderTrendChart(trendData);
+            renderInsights(insights);
+            renderCategoryTable(catData);
+        } catch (err) { console.error(err); }
+    }
+
+    function renderCategoryChart(data) {
+        const cats = data.expensesByCategory || {};
+        new Chart(document.getElementById('categoryPieChart').getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: Object.keys(cats),
+                datasets: [{ data: Object.values(cats),
+                    backgroundColor: ['#6366f1','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'] }]
+            },
+            options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+
+    function renderTrendChart(data) {
+        const monthly = data.monthlyData || [];
+        new Chart(document.getElementById('trendChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: monthly.map(m => m.month),
+                datasets: [
+                    { label: 'Income', data: monthly.map(m => m.income), backgroundColor: 'rgba(34,197,94,0.7)' },
+                    { label: 'Expenses', data: monthly.map(m => m.expenses), backgroundColor: 'rgba(239,68,68,0.7)' }
+                ]
+            },
+            options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    function renderInsights(insights) {
+        const el = document.getElementById('insightsList');
+        if (!insights.length) {
+            el.innerHTML = '<p class="text-gray-500 dark:text-gray-400">Add more transactions to generate insights.</p>';
+            return;
+        }
+        el.innerHTML = insights.map(i => `
+            <div class="flex items-start space-x-3 p-3 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg">
+                <span class="text-indigo-500 mt-0.5">💡</span>
+                <p class="text-gray-700 dark:text-gray-300 text-sm">${i}</p>
+            </div>`).join('');
+    }
+
+    function renderCategoryTable(data) {
+        const cats = data.expensesByCategory || {};
+        const total = Object.values(cats).reduce((a, b) => a + b, 0);
+        const tbody = document.getElementById('categoryTableBody');
+        const rows = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center py-6 text-gray-400">No expense data yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(([cat, amt]) =>
+            `<tr class="border-b border-gray-100 dark:border-gray-700">
+                <td class="py-3 px-2 font-medium text-gray-900 dark:text-white">${cat}</td>
+                <td class="py-3 px-2 text-right text-gray-700 dark:text-gray-300">${fc(amt)}</td>
+                <td class="py-3 px-2 text-right text-gray-500 dark:text-gray-400">${total > 0 ? ((amt/total)*100).toFixed(1) : 0}%</td>
+            </tr>`
+        ).join('');
+    }
+
+    document.addEventListener('DOMContentLoaded', loadAnalytics);
+    </script>
+
+    <script src="/js/theme.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

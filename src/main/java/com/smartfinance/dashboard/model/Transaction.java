@@ -1,0 +1,56 @@
+package com.smartfinance.dashboard.model;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "transactions")
+@Data
+public class Transaction {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    @Column(nullable = false)
+    private String type; // INCOME or EXPENSE
+    
+    @Column(nullable = false)
+    private BigDecimal amount;
+    
+    @Column(nullable = false)
+    private String currency;
+    
+    @Column(nullable = false)
+    private String category;
+    
+    private String description;
+    
+    @Column(nullable = false)
+    private LocalDateTime transactionDate;
+    
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
+    
+    private LocalDateTime updatedAt;
+    
+    private Boolean isRecurring = false;
+    
+    private String recurringFrequency; // DAILY, WEEKLY, MONTHLY, YEARLY
+    
+    private String tags;
+    
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        if (transactionDate == null) {
+            transactionDate = LocalDateTime.now();
+        }
+    }
+    
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+}

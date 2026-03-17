@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings — Smart Finance Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+
+    <nav class="bg-white dark:bg-gray-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center">
+                        <h1 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">💰 Smart Finance</h1>
+                    </div>
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                        <a href="/dashboard" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</a>
+                        <a href="/transactions" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Transactions</a>
+                        <a href="/budgets" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Budgets</a>
+                        <a href="/investments" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Investments</a>
+                        <a href="/goals" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Goals</a>
+                        <a href="/reports" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Reports</a>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/settings" class="text-sm text-indigo-600 dark:text-indigo-400 font-semibold border-b border-indigo-600">Settings</a>
+                    <button id="themeToggle" class="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <svg id="themeIcon" class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                        </svg>
+                    </button>
+                    <a href="/logout" class="text-sm text-red-500 hover:text-red-700">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Settings</h2>
+
+        <div id="saveMsg" class="hidden mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm">Settings saved successfully.</div>
+
+        <!-- Appearance -->
+        <div class="card mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Appearance</h3>
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="font-medium text-gray-700 dark:text-gray-300">Dark Mode</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Switch between light and dark interface</p>
+                </div>
+                <button id="darkModeToggle" onclick="toggleDarkMode()"
+                        class="relative inline-flex items-center w-14 h-7 rounded-full transition-colors duration-300 focus:outline-none">
+                    <span id="darkModeSlider" class="inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-300 translate-x-1"></span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Currency -->
+        <div class="card mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Currency</h3>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Base Currency</label>
+                <select id="baseCurrency" class="form-input w-full max-w-xs">
+                    <option value="USD">USD — US Dollar</option>
+                    <option value="EUR">EUR — Euro</option>
+                    <option value="GBP">GBP — British Pound</option>
+                    <option value="JPY">JPY — Japanese Yen</option>
+                    <option value="CAD">CAD — Canadian Dollar</option>
+                    <option value="AUD">AUD — Australian Dollar</option>
+                    <option value="CHF">CHF — Swiss Franc</option>
+                    <option value="CNY">CNY — Chinese Yuan</option>
+                    <option value="INR">INR — Indian Rupee</option>
+                    <option value="BRL">BRL — Brazilian Real</option>
+                </select>
+                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">All amounts will be displayed in this currency.</p>
+            </div>
+        </div>
+
+        <!-- Exchange Rates (Mock) -->
+        <div class="card mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Exchange Rates (vs USD)</h3>
+            <div id="exchangeRates" class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p class="text-gray-500 dark:text-gray-400">EUR</p>
+                    <p class="font-semibold text-gray-900 dark:text-white">0.9234</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p class="text-gray-500 dark:text-gray-400">GBP</p>
+                    <p class="font-semibold text-gray-900 dark:text-white">0.7891</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p class="text-gray-500 dark:text-gray-400">JPY</p>
+                    <p class="font-semibold text-gray-900 dark:text-white">149.52</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p class="text-gray-500 dark:text-gray-400">CAD</p>
+                    <p class="font-semibold text-gray-900 dark:text-white">1.3612</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p class="text-gray-500 dark:text-gray-400">AUD</p>
+                    <p class="font-semibold text-gray-900 dark:text-white">1.5243</p>
+                </div>
+                <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p class="text-gray-500 dark:text-gray-400">INR</p>
+                    <p class="font-semibold text-gray-900 dark:text-white">83.12</p>
+                </div>
+            </div>
+            <p class="mt-3 text-xs text-gray-400">Rates are approximate and updated periodically.</p>
+        </div>
+
+        <!-- Save Button -->
+        <button onclick="saveSettings()" class="btn-primary px-8">Save Settings</button>
+    </main>
+
+    <script src="/js/theme.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/settings.js"></script>
+</body>
+</html>
