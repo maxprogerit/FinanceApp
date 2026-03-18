@@ -27,6 +27,11 @@ public class AnalyticsController {
         return ResponseEntity.ok(analyticsService.getMonthlyTrends(months));
     }
     
+    @GetMapping("/trends/daily")
+    public ResponseEntity<Map<String, Object>> getDailyTrends(@RequestParam(defaultValue = "30") int days) {
+        return ResponseEntity.ok(analyticsService.getDailyTrends(days));
+    }
+
     @GetMapping("/categories")
     public ResponseEntity<Map<String, Object>> getCategoryAnalysis() {
         return ResponseEntity.ok(analyticsService.getCategoryAnalysis());

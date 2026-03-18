@@ -1,6 +1,7 @@
 package com.smartfinance.dashboard.service;
 
 import com.smartfinance.dashboard.model.Budget;
+import com.smartfinance.dashboard.model.Transaction;
 import com.smartfinance.dashboard.repository.BudgetRepository;
 import com.smartfinance.dashboard.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -8,9 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +22,19 @@ public class BudgetService {
     private final BudgetRepository budgetRepository;
     private final AlertService alertService;
     private final TransactionRepository transactionRepository;
+    private final CurrencyService currencyService;
+
+    /** Convert amount from one currency to another using live/cached rates. */
+    private BigDecimal convertToBudgetCurrency(BigDecimal amount, String fromCurrency, String toCurrency) {
+        if (fromCurrency == null || toCurrency == null || fromCurrency.equals(toCurrency)) return amount;
+        Map<String, Double> rates = currencyService.getRatesFromUSD();
+        double fromRate = rates.getOrDefault(fromCurrency, 1.0);
+        double toRate   = rates.getOrDefault(toCurrency,   1.0);
+        return amount
+                .divide(BigDecimal.valueOf(fromRate), 10, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(toRate))
+                .setScale(2, RoundingMode.HALF_UP);
+    }
 
     @Transactional
     public Budget createBudget(Budget budget) {
@@ -62,10 +78,12 @@ public class BudgetService {
     }
 
     @Transactional
-    public void updateBudgetSpending(String category, BigDecimal amount) {
+    public void updateBudgetSpending(String category, BigDecimal amount, String transactionCurrency) {
         budgetRepository.findActiveBudgetByCategoryAndDate(category, LocalDate.now())
                 .ifPresent(budget -> {
-                    budget.setSpentAmount(budget.getSpentAmount().add(amount));
+                    String budgetCurrency = budget.getCurrency() != null ? budget.getCurrency() : "USD";
+                    BigDecimal converted = convertToBudgetCurrency(amount, transactionCurrency, budgetCurrency);
+                    budget.setSpentAmount(budget.getSpentAmount().add(converted));
                     budgetRepository.save(budget);
 
                     double percentageUsed = budget.getPercentageUsed();
@@ -85,8 +103,8 @@ public class BudgetService {
 
     /**
      * Recomputes spentAmount for all budgets by summing actual EXPENSE transactions
-     * within each budget's date range and category. Fixes any drift caused by
-     * manual DB edits or historic data migration.
+     * within each budget's date range and category, converting each transaction's
+     * currency to the budget's currency. Fixes drift caused by manual DB edits or migration.
      */
     @Transactional
     public int recalculateAllBudgetSpending() {
@@ -94,11 +112,21 @@ public class BudgetService {
         for (Budget budget : budgets) {
             LocalDateTime start = budget.getStartDate().atStartOfDay();
             LocalDateTime end   = budget.getEndDate().atTime(23, 59, 59, 999999999);
+            String budgetCurrency = budget.getCurrency() != null ? budget.getCurrency() : "USD";
 
-            BigDecimal totalSpent = transactionRepository
-                    .sumExpensesByCategoryAndDateRange(budget.getCategory(), start, end);
+            List<Transaction> expenses = transactionRepository
+                    .findByTypeAndTransactionDateBetween("EXPENSE", start, end)
+                    .stream()
+                    .filter(t -> budget.getCategory().equals(t.getCategory()))
+                    .toList();
 
-            budget.setSpentAmount(totalSpent != null ? totalSpent : BigDecimal.ZERO);
+            BigDecimal totalSpent = BigDecimal.ZERO;
+            for (Transaction tx : expenses) {
+                totalSpent = totalSpent.add(
+                        convertToBudgetCurrency(tx.getAmount(), tx.getCurrency(), budgetCurrency));
+            }
+
+            budget.setSpentAmount(totalSpent);
             budgetRepository.save(budget);
         }
         return budgets.size();

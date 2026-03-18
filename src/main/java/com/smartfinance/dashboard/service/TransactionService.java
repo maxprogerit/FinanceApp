@@ -25,7 +25,8 @@ public class TransactionService {
         
         // Update budget if it's an expense
         if ("EXPENSE".equals(transaction.getType())) {
-            budgetService.updateBudgetSpending(transaction.getCategory(), transaction.getAmount());
+            budgetService.updateBudgetSpending(
+                    transaction.getCategory(), transaction.getAmount(), transaction.getCurrency());
         }
         
         return saved;
@@ -38,6 +39,7 @@ public class TransactionService {
         
         BigDecimal oldAmount = existing.getAmount();
         String oldCategory = existing.getCategory();
+        String oldCurrency = existing.getCurrency();
         
         existing.setType(transaction.getType());
         existing.setAmount(transaction.getAmount());
@@ -53,14 +55,16 @@ public class TransactionService {
 
         Transaction updated = transactionRepository.save(existing);
         
-        // Update budgets if amounts or categories changed
+        // Update budgets if any expense-relevant field changed
         if ("EXPENSE".equals(transaction.getType())) {
-            if (!oldCategory.equals(transaction.getCategory())) {
-                budgetService.updateBudgetSpending(oldCategory, oldAmount.negate());
-                budgetService.updateBudgetSpending(transaction.getCategory(), transaction.getAmount());
-            } else if (!oldAmount.equals(transaction.getAmount())) {
-                BigDecimal difference = transaction.getAmount().subtract(oldAmount);
-                budgetService.updateBudgetSpending(transaction.getCategory(), difference);
+            boolean categoryChanged = !oldCategory.equals(transaction.getCategory());
+            boolean amountChanged   = !oldAmount.equals(transaction.getAmount());
+            boolean currencyChanged = !oldCurrency.equals(transaction.getCurrency());
+            if (categoryChanged || amountChanged || currencyChanged) {
+                // Reverse the old contribution (in its original currency), then apply the new one
+                budgetService.updateBudgetSpending(oldCategory, oldAmount.negate(), oldCurrency);
+                budgetService.updateBudgetSpending(
+                        transaction.getCategory(), transaction.getAmount(), transaction.getCurrency());
             }
         }
         
@@ -74,7 +78,8 @@ public class TransactionService {
         
         // Reduce budget spending if it's an expense
         if ("EXPENSE".equals(transaction.getType())) {
-            budgetService.updateBudgetSpending(transaction.getCategory(), transaction.getAmount().negate());
+            budgetService.updateBudgetSpending(
+                    transaction.getCategory(), transaction.getAmount().negate(), transaction.getCurrency());
         }
         
         transactionRepository.deleteById(id);

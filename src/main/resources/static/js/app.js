@@ -73,7 +73,8 @@ async function fetchExchangeRates() {
 
 // ─── Nav currency selector (auto-injected on every authenticated page) ────────
 function injectCurrencySelector() {
-    if (document.getElementById('globalCurrencySelect')) return;
+    // Now handled by injectSidebar — skip if sidebar is present
+    if (document.getElementById('app-sidebar')) return;
     const container = document.querySelector('nav .flex.items-center.space-x-4');
     if (!container) return;
 
@@ -99,6 +100,153 @@ function injectCurrencySelector() {
     });
 
     container.insertBefore(select, container.firstChild);
+}
+
+// ─── Page title map ───────────────────────────────────────────────────────────
+function _getPageTitle(path) {
+    const titles = {
+        '/dashboard': 'Dashboard', '/transactions': 'Transactions',
+        '/budgets': 'Budgets', '/investments': 'Investments',
+        '/goals': 'Financial Goals', '/reports': 'Reports & Export',
+        '/subscriptions': 'Subscriptions', '/debts': 'Debt Tracker',
+        '/analytics': 'Advanced Analytics', '/settings': 'Settings',
+    };
+    return titles[path] || 'Smart Finance';
+}
+
+// ─── Sidebar injection (runs on every authenticated page) ─────────────────────
+function injectSidebar() {
+    if (document.getElementById('app-sidebar')) return;
+    const existingNav = document.querySelector('body > nav');
+    if (!existingNav) return; // login / register / index — no sidebar needed
+    existingNav.style.display = 'none';
+
+    const path = window.location.pathname;
+    const isDark = document.documentElement.classList.contains('dark');
+
+    const navItems = [
+        { href: '/dashboard',     label: 'Dashboard',     icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>' },
+        { href: '/transactions',  label: 'Transactions',  icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>' },
+        { href: '/budgets',       label: 'Budgets',       icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>' },
+        { href: '/investments',   label: 'Investments',   icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>' },
+        { href: '/goals',         label: 'Goals',         icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6H8l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/>' },
+        { href: '/reports',       label: 'Reports',       icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>' },
+        { href: '/subscriptions', label: 'Subscriptions', icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>' },
+        { href: '/debts',         label: 'Debts',         icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>' },
+        { href: '/analytics',     label: 'Analytics',     icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>' },
+        { href: '/settings',      label: 'Settings',      icon: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>' },
+    ];
+
+    const moonPath  = 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z';
+    const sunPath   = 'M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z';
+    const themePath = isDark ? sunPath : moonPath;
+
+    // ── Sidebar ──
+    const sidebar = document.createElement('aside');
+    sidebar.id = 'app-sidebar';
+    sidebar.innerHTML = `
+        <div class="sidebar-logo">
+            <span class="sidebar-logo-icon">💰</span>
+            <span class="sidebar-logo-text">Smart Finance</span>
+        </div>
+        <nav class="sidebar-nav">
+            ${navItems.map(item => {
+                const active = path === item.href || (item.href !== '/' && path.startsWith(item.href));
+                return `<a href="${item.href}" class="sidebar-nav-item${active ? ' active' : ''}">
+                    <span class="sidebar-nav-icon">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon-sm">${item.icon}</svg>
+                    </span>
+                    <span class="sidebar-nav-label">${item.label}</span>
+                </a>`;
+            }).join('')}
+        </nav>
+        <div class="sidebar-footer">
+            <select id="globalCurrencySelect" title="Display currency" class="sidebar-currency">
+                ${SUPPORTED_CURRENCIES.map(c => `<option value="${c}"${c === currentCurrency ? ' selected' : ''}>${c}</option>`).join('')}
+            </select>
+            <button id="sidebarThemeBtn" class="sidebar-icon-btn" title="Toggle theme">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon-sm">
+                    <path id="sidebarThemePath" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${themePath}"/>
+                </svg>
+            </button>
+            <a href="/logout" class="sidebar-icon-btn sidebar-logout" title="Logout">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon-sm">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+            </a>
+        </div>`;
+
+    // ── Top header ──
+    const header = document.createElement('header');
+    header.id = 'app-header';
+    header.innerHTML = `
+        <div class="header-left">
+            <button id="sidebarToggle" class="sidebar-toggle" title="Toggle sidebar">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
+                </svg>
+            </button>
+            <span class="header-title">${_getPageTitle(path)}</span>
+        </div>
+        <div class="header-right">
+            <div class="relative">
+                <button id="notificationBtn" class="header-icon-btn" title="Notifications">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                    <span id="notificationBadge" class="hidden notification-badge">0</span>
+                </button>
+            </div>
+        </div>`;
+
+    // ── Mobile backdrop ──
+    const backdrop = document.createElement('div');
+    backdrop.id = 'sidebar-backdrop';
+    backdrop.addEventListener('click', () => {
+        sidebar.classList.remove('mobile-open');
+        backdrop.style.display = 'none';
+    });
+
+    document.body.insertBefore(sidebar, document.body.firstChild);
+    document.body.insertBefore(header, sidebar.nextSibling);
+    document.body.appendChild(backdrop);
+    document.body.classList.add('has-sidebar');
+
+    // Adjust existing <main> padding
+    const mainEl = document.querySelector('main');
+    if (mainEl) mainEl.style.maxWidth = 'none';
+
+    // Wire currency selector
+    const currSel = document.getElementById('globalCurrencySelect');
+    if (currSel) {
+        currSel.addEventListener('change', e => { setCurrency(e.target.value); location.reload(); });
+    }
+
+    // Wire theme toggle (independent of theme.js which binds to the hidden nav's button)
+    const themePath2 = document.getElementById('sidebarThemePath');
+    const themeBtn = document.getElementById('sidebarThemeBtn');
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            const nowDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', nowDark ? 'dark' : 'light');
+            if (themePath2) themePath2.setAttribute('d', nowDark ? sunPath : moonPath);
+        });
+    }
+
+    // Wire sidebar toggle
+    const toggleBtn = document.getElementById('sidebarToggle');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            if (window.innerWidth <= 768) {
+                const opening = !sidebar.classList.contains('mobile-open');
+                sidebar.classList.toggle('mobile-open');
+                backdrop.style.display = opening ? 'block' : 'none';
+            } else {
+                sidebar.classList.toggle('collapsed');
+                document.body.classList.toggle('sidebar-collapsed');
+            }
+        });
+    }
 }
 
 // ─── Toast notifications ──────────────────────────────────────────────────────
@@ -210,7 +358,8 @@ function emptyStateHTML(icon, message) {
 
 // ─── Init on every page ───────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    injectCurrencySelector();
+    injectSidebar();
+    injectCurrencySelector(); // fallback for pages without a nav
     fetchExchangeRates();
 });
 
