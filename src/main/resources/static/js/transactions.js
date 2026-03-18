@@ -94,7 +94,7 @@ function toggleIncomeSourceField() {
 
 async function loadTransactions() {
     const tableBody = document.getElementById('transactionsTable');
-    tableBody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-gray-400">Loading...</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="8" class="px-6 py-8 text-center text-gray-400">Loading...</td></tr>`;
     try {
         allTransactions = await apiGet('/transactions');
         allTransactions.sort((a, b) => new Date(b.transactionDate) - new Date(a.transactionDate));
@@ -104,6 +104,14 @@ async function loadTransactions() {
     }
 }
 
+function renderTagBadges(tagsStr) {
+    if (!tagsStr || !tagsStr.trim()) return '<span class="text-gray-400 text-xs">—</span>';
+    return tagsStr.split(',')
+        .map(t => t.trim()).filter(Boolean)
+        .map(t => `<span class="inline-block bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs px-1.5 py-0.5 rounded mr-1 mb-1">${t}</span>`)
+        .join('');
+}
+
 function displayTransactions(transactions) {
     const tableBody = document.getElementById('transactionsTable');
     tableBody.innerHTML = '';
@@ -111,7 +119,7 @@ function displayTransactions(transactions) {
     if (transactions.length === 0) {
         tableBody.innerHTML = `
             <tr>
-                <td colspan="7" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                <td colspan="8" class="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                     No transactions found. Click "Add Transaction" to get started!
                 </td>
             </tr>
@@ -147,6 +155,9 @@ function displayTransactions(transactions) {
             <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-300">
                 ${transaction.description || '-'}
             </td>
+            <td class="px-6 py-4 text-sm">
+                ${renderTagBadges(transaction.tags)}
+            </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium ${typeClass}">
                 ${typeSign}${formatCurrency(transaction.amount, transaction.currency)}
             </td>
@@ -160,6 +171,33 @@ function displayTransactions(transactions) {
     });
 }
 
+// ── Fast Input: localStorage helpers ──────────────────────────────────────────
+function saveLastUsed(type, category, storageType) {
+    localStorage.setItem('lastTxType', type || '');
+    localStorage.setItem('lastTxCategory', category || '');
+    localStorage.setItem('lastTxStorageType', storageType || '');
+}
+
+function applyLastUsed() {
+    const type = localStorage.getItem('lastTxType');
+    const category = localStorage.getItem('lastTxCategory');
+    const storageType = localStorage.getItem('lastTxStorageType');
+
+    if (type) {
+        const typeEl = document.getElementById('type');
+        if (typeEl) { typeEl.value = type; toggleIncomeSourceField(); }
+    }
+    if (category) {
+        const catEl = document.getElementById('category');
+        if (catEl && catEl.querySelector(`option[value="${category}"]`)) {
+            catEl.value = category;
+        }
+    }
+    if (storageType) {
+        populateStorageTypeSelect(storageType);
+    }
+}
+
 function showModal(isEdit = false) {
     document.getElementById('modalTitle').textContent = isEdit ? 'Edit Transaction' : 'Add Transaction';
     document.getElementById('transactionModal').classList.remove('hidden');
@@ -168,9 +206,12 @@ function showModal(isEdit = false) {
         document.getElementById('transactionForm').reset();
         document.getElementById('transactionId').value = '';
         document.getElementById('transactionDate').value = new Date().toISOString().slice(0, 16);
+        document.getElementById('tags').value = '';
         populateStorageTypeSelect('');
         populateIncomeSourceSelect('');
         toggleIncomeSourceField();
+        // Apply fast input pre-fill
+        applyLastUsed();
     }
 }
 
@@ -190,6 +231,7 @@ async function editTransaction(id) {
         document.getElementById('currency').value = transaction.currency;
         document.getElementById('category').value = transaction.category;
         document.getElementById('description').value = transaction.description || '';
+        document.getElementById('tags').value = transaction.tags || '';
         document.getElementById('transactionDate').value = formatDateForInput(transaction.transactionDate);
         document.getElementById('isRecurring').checked = transaction.isRecurring;
 
@@ -225,18 +267,22 @@ async function saveTransaction(event) {
     setLoading(submitBtn, true);
 
     const typeVal = document.getElementById('type').value;
+    const categoryVal = document.getElementById('category').value;
+    const storageTypeVal = document.getElementById('storageType').value || null;
+
     const transaction = {
         type: typeVal,
         amount: parseFloat(document.getElementById('amount').value),
         currency: document.getElementById('currency').value,
-        category: document.getElementById('category').value,
+        category: categoryVal,
         description: document.getElementById('description').value,
+        tags: document.getElementById('tags').value.trim() || null,
         transactionDate: new Date(document.getElementById('transactionDate').value).toISOString(),
         isRecurring: document.getElementById('isRecurring').checked,
         recurringFrequency: document.getElementById('isRecurring').checked
             ? document.getElementById('recurringFrequency').value
             : null,
-        storageType: document.getElementById('storageType').value || null,
+        storageType: storageTypeVal,
         incomeSource: (typeVal === 'INCOME')
             ? (document.getElementById('incomeSource').value || null)
             : null
@@ -250,6 +296,7 @@ async function saveTransaction(event) {
         } else {
             await apiPost('/transactions', transaction);
             showSuccess('Transaction added.');
+            saveLastUsed(typeVal, categoryVal, storageTypeVal);
         }
         hideModal();
         loadTransactions();
@@ -264,11 +311,13 @@ function applyFilters() {
     let filtered = [...allTransactions];
     const type = document.getElementById('filterType').value;
     const category = document.getElementById('filterCategory').value;
+    const tag = (document.getElementById('filterTag')?.value || '').toLowerCase().trim();
     const startDate = document.getElementById('filterStartDate').value;
     const endDate = document.getElementById('filterEndDate').value;
 
     if (type) filtered = filtered.filter(t => t.type === type);
     if (category) filtered = filtered.filter(t => t.category === category);
+    if (tag) filtered = filtered.filter(t => t.tags && t.tags.toLowerCase().includes(tag));
     if (startDate) filtered = filtered.filter(t => new Date(t.transactionDate) >= new Date(startDate));
     if (endDate) {
         const endDateTime = new Date(endDate);
@@ -281,6 +330,7 @@ function applyFilters() {
 function clearFilters() {
     document.getElementById('filterType').value = '';
     document.getElementById('filterCategory').value = '';
+    if (document.getElementById('filterTag')) document.getElementById('filterTag').value = '';
     document.getElementById('filterStartDate').value = '';
     document.getElementById('filterEndDate').value = '';
     displayTransactions(allTransactions);
@@ -316,6 +366,35 @@ async function exportToCSV() {
     }
 }
 
+async function importCSV(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('currency', currentCurrency || 'USD');
+
+    try {
+        const response = await fetch(`${API}/import/csv`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) throw new Error(`Server error ${response.status}`);
+        const result = await response.json();
+
+        if (result.imported > 0) {
+            showSuccess(`Imported ${result.imported} transaction(s).${result.skipped > 0 ? ` Skipped ${result.skipped}.` : ''}`);
+        } else {
+            showError(`No transactions imported. ${result.errors?.[0] || 'Check your CSV format.'}`);
+        }
+
+        if (result.errors && result.errors.length > 0) {
+            console.warn('Import warnings:', result.errors);
+        }
+
+        loadTransactions();
+    } catch (e) {
+        showError('Failed to import CSV: ' + e.message);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadCategories();
     loadStorageTypes();
@@ -336,6 +415,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('applyFilters').addEventListener('click', applyFilters);
     document.getElementById('clearFilters').addEventListener('click', clearFilters);
     document.getElementById('exportCSV').addEventListener('click', exportToCSV);
+
+    // CSV Import
+    const importBtn = document.getElementById('importCsvBtn');
+    const csvInput = document.getElementById('csvFileInput');
+    if (importBtn && csvInput) {
+        importBtn.addEventListener('click', () => csvInput.click());
+        csvInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                importCSV(e.target.files[0]);
+                e.target.value = ''; // reset so same file can be re-imported
+            }
+        });
+    }
+
+    // Tag filter — live filter as user types
+    const tagInput = document.getElementById('filterTag');
+    if (tagInput) tagInput.addEventListener('input', applyFilters);
 
     document.getElementById('transactionModal').addEventListener('click', (e) => {
         if (e.target.id === 'transactionModal') hideModal();

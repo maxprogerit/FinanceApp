@@ -1,4 +1,4 @@
-package com.smartfinance.dashboard;
+package com.smartfinance.dashboard.config;
 
 import com.smartfinance.dashboard.model.IncomeSource;
 import com.smartfinance.dashboard.model.StorageType;

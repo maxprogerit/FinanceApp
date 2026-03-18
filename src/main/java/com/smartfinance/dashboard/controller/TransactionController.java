@@ -84,4 +84,27 @@ public class TransactionController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
         return ResponseEntity.ok(transactionService.getExpensesByCategory(startDate, endDate));
     }
+
+    @GetMapping("/tags")
+    public ResponseEntity<java.util.Set<String>> getAllTags() {
+        java.util.Set<String> tags = new java.util.TreeSet<>();
+        transactionService.getAllTransactions().forEach(t -> {
+            if (t.getTags() != null && !t.getTags().isBlank()) {
+                for (String tag : t.getTags().split(",")) {
+                    String trimmed = tag.trim();
+                    if (!trimmed.isEmpty()) tags.add(trimmed);
+                }
+            }
+        });
+        return ResponseEntity.ok(tags);
+    }
+
+    @GetMapping("/by-tag")
+    public ResponseEntity<List<Transaction>> getByTag(@RequestParam String tag) {
+        String lower = tag.toLowerCase().trim();
+        List<Transaction> filtered = transactionService.getAllTransactions().stream()
+                .filter(t -> t.getTags() != null && t.getTags().toLowerCase().contains(lower))
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(filtered);
+    }
 }

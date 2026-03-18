@@ -26,6 +26,7 @@ async function loadDashboard() {
         loadRecentTransactions();
         loadStorageChart();
         loadIncomeSourceChart();
+        loadHealthScore();
     } catch (e) {
         showError('Failed to load dashboard data.');
     }
@@ -342,6 +343,55 @@ async function loadIncomeSourceChart(month, year) {
         });
     } catch (e) {
         console.error('Error loading income source chart:', e);
+    }
+}
+
+async function loadHealthScore() {
+    try {
+        const hs = await apiGet('/analytics/health-score');
+        const scoreEl = document.getElementById('healthScoreValue');
+        const gradeEl = document.getElementById('healthScoreGrade');
+        const breakdownEl = document.getElementById('healthScoreBreakdown');
+        const adviceEl = document.getElementById('healthScoreAdvice');
+        const circleEl = document.getElementById('healthScoreCircle');
+
+        if (!scoreEl) return;
+
+        scoreEl.textContent = hs.score;
+        gradeEl.textContent = 'Grade ' + hs.grade;
+
+        // Color the circle by grade
+        const gradeColors = { A: 'bg-green-100 dark:bg-green-900', B: 'bg-blue-100 dark:bg-blue-900', C: 'bg-yellow-100 dark:bg-yellow-900', D: 'bg-orange-100 dark:bg-orange-900', F: 'bg-red-100 dark:bg-red-900' };
+        const gradeTextColors = { A: 'text-green-700 dark:text-green-300', B: 'text-blue-700 dark:text-blue-300', C: 'text-yellow-700 dark:text-yellow-300', D: 'text-orange-700 dark:text-orange-300', F: 'text-red-700 dark:text-red-300' };
+        if (circleEl) circleEl.className = `inline-flex items-center justify-center w-24 h-24 rounded-full ${gradeColors[hs.grade] || 'bg-gray-100 dark:bg-gray-700'}`;
+        if (scoreEl) scoreEl.className = `text-3xl font-bold ${gradeTextColors[hs.grade] || 'text-gray-900 dark:text-white'}`;
+
+        if (adviceEl) adviceEl.textContent = hs.advice;
+
+        const b = hs.breakdown || {};
+        const bars = [
+            { label: 'Savings Rate', score: b.savingsRate || 0, max: 30 },
+            { label: 'Budget Adherence', score: b.budgetAdherence || 0, max: 20 },
+            { label: 'Spending Trend', score: b.spendingTrend || 0, max: 20 },
+            { label: 'Investments', score: b.hasInvestments || 0, max: 15 },
+            { label: 'Emergency Reserve', score: b.emergencyReserve || 0, max: 15 },
+        ];
+        breakdownEl.innerHTML = bars.map(bar => {
+            const pct = Math.round((bar.score / bar.max) * 100);
+            const barColor = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-red-500';
+            return `
+            <div>
+                <div class="flex justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+                    <span>${bar.label}</span>
+                    <span>${bar.score}/${bar.max}</span>
+                </div>
+                <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                    <div class="${barColor} h-1.5 rounded-full" style="width:${pct}%"></div>
+                </div>
+            </div>`;
+        }).join('');
+    } catch (e) {
+        console.error('Error loading health score:', e);
     }
 }
 

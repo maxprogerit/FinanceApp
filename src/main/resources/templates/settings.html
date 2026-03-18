@@ -23,6 +23,8 @@
                         <a href="/investments" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Investments</a>
                         <a href="/goals" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Goals</a>
                         <a href="/reports" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Reports</a>
+                        <a href="/subscriptions" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Subscriptions</a>
+                        <a href="/debts" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Debts</a>
                     </div>
                 </div>
                 <div class="flex items-center space-x-4">
@@ -163,6 +165,20 @@
             </div>
         </div>
 
+        <!-- Categorization Rules -->
+        <div class="card mt-6 mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">🏷️ Auto-Categorization Rules</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">Match transaction descriptions to categories automatically (higher priority runs first)</p>
+                </div>
+                <button onclick="showAddRuleModal()" class="btn-primary text-sm px-4 py-1.5">+ Add Rule</button>
+            </div>
+            <div id="categorizationRulesList" class="space-y-2">
+                <p class="text-gray-400 text-sm">Loading...</p>
+            </div>
+        </div>
+
     </main>
 
     <!-- Storage Type Modal -->
@@ -211,6 +227,45 @@
             <div class="flex justify-end gap-2 mt-6">
                 <button onclick="closeIncomeSourceModal()" class="btn-secondary">Cancel</button>
                 <button onclick="saveIncomeSource()" class="btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Categorization Rule Modal -->
+    <div id="ruleModal" class="modal hidden">
+        <div class="modal-content max-w-sm">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="ruleModalTitle" class="text-lg font-bold text-gray-900 dark:text-white">Add Rule</h3>
+                <button onclick="closeRuleModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+            </div>
+            <input type="hidden" id="ruleId">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Pattern (keyword)</label>
+                    <input type="text" id="rulePattern" class="form-input w-full" placeholder="e.g. Uber" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                    <select id="ruleCategory" class="form-input w-full">
+                        <!-- Loaded from /api/categories/active -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Transaction Type (optional)</label>
+                    <select id="ruleType" class="form-input w-full">
+                        <option value="">Any</option>
+                        <option value="INCOME">Income</option>
+                        <option value="EXPENSE">Expense</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority (higher = runs first)</label>
+                    <input type="number" id="rulePriority" class="form-input w-full" value="0" min="0">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button onclick="closeRuleModal()" class="btn-secondary">Cancel</button>
+                <button onclick="saveRule()" class="btn-primary">Save</button>
             </div>
         </div>
     </div>

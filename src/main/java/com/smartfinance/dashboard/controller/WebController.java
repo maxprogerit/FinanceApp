@@ -50,4 +50,14 @@ public class WebController {
     public String settings() {
         return "settings";
     }
+
+    @GetMapping("/subscriptions")
+    public String subscriptions() {
+        return "subscriptions";
+    }
+
+    @GetMapping("/debts")
+    public String debts() {
+        return "debts";
+    }
 }

@@ -201,6 +201,101 @@ public class AnalyticsService {
         return result;
     }
 
+    public Map<String, Object> getHealthScore() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime endOfMonth = now.withDayOfMonth(now.toLocalDate().lengthOfMonth())
+                .withHour(23).withMinute(59).withSecond(59).withNano(999999999);
+
+        // Savings rate score (30 pts max)
+        BigDecimal income = transactionService.getTotalIncomeForPeriod(startOfMonth, endOfMonth);
+        BigDecimal expenses = transactionService.getTotalExpensesForPeriod(startOfMonth, endOfMonth);
+        double savingsRate = 0;
+        if (income.compareTo(BigDecimal.ZERO) > 0) {
+            savingsRate = income.subtract(expenses).divide(income, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).doubleValue();
+        }
+        int savingsScore = (int) Math.min(Math.max(savingsRate, 0), 30);
+
+        // Budget adherence score (20 pts max)
+        List activeBudgets = budgetService.getActiveBudgets();
+        List overBudget = budgetService.getBudgetsExceedingThreshold(80);
+        int budgetScore;
+        if (activeBudgets.isEmpty()) {
+            budgetScore = 20;
+        } else {
+            double adherence = (double)(activeBudgets.size() - overBudget.size()) / activeBudgets.size();
+            budgetScore = (int) Math.max(adherence * 20, 0);
+        }
+
+        // Spending trend score (20 pts max)
+        YearMonth lastMonth = YearMonth.now().minusMonths(1);
+        LocalDateTime lastStart = lastMonth.atDay(1).atStartOfDay();
+        LocalDateTime lastEnd = lastMonth.atEndOfMonth().atTime(23, 59, 59);
+        BigDecimal lastMonthExpenses = transactionService.getTotalExpensesForPeriod(lastStart, lastEnd);
+        int trendScore;
+        int comparison = expenses.compareTo(lastMonthExpenses);
+        if (comparison < 0) trendScore = 20;
+        else if (comparison == 0 || lastMonthExpenses.compareTo(BigDecimal.ZERO) == 0) trendScore = 10;
+        else trendScore = 0;
+
+        // Investment score (15 pts max)
+        BigDecimal portfolioValue = investmentService.getTotalPortfolioValue();
+        int investmentScore = portfolioValue.compareTo(BigDecimal.ZERO) > 0 ? 15 : 0;
+
+        // Emergency reserve score (15 pts max)
+        BigDecimal threeMonthIncome = BigDecimal.ZERO;
+        BigDecimal threeMonthExpenses = BigDecimal.ZERO;
+        for (int i = 1; i <= 3; i++) {
+            YearMonth ym = YearMonth.now().minusMonths(i);
+            LocalDateTime s = ym.atDay(1).atStartOfDay();
+            LocalDateTime e = ym.atEndOfMonth().atTime(23, 59, 59);
+            threeMonthIncome = threeMonthIncome.add(transactionService.getTotalIncomeForPeriod(s, e));
+            threeMonthExpenses = threeMonthExpenses.add(transactionService.getTotalExpensesForPeriod(s, e));
+        }
+        BigDecimal netSavings3m = threeMonthIncome.subtract(threeMonthExpenses);
+        BigDecimal avgMonthlyExpenses = threeMonthExpenses.divide(BigDecimal.valueOf(3), 2, RoundingMode.HALF_UP);
+        int reserveScore;
+        if (avgMonthlyExpenses.compareTo(BigDecimal.ZERO) == 0) {
+            reserveScore = 15;
+        } else if (netSavings3m.compareTo(avgMonthlyExpenses.multiply(BigDecimal.valueOf(3))) >= 0) {
+            reserveScore = 15;
+        } else if (netSavings3m.compareTo(avgMonthlyExpenses) >= 0) {
+            reserveScore = 7;
+        } else {
+            reserveScore = 0;
+        }
+
+        int totalScore = savingsScore + budgetScore + trendScore + investmentScore + reserveScore;
+        String grade;
+        if (totalScore >= 85) grade = "A";
+        else if (totalScore >= 70) grade = "B";
+        else if (totalScore >= 55) grade = "C";
+        else if (totalScore >= 40) grade = "D";
+        else grade = "F";
+
+        String advice;
+        if (totalScore >= 85) advice = "Excellent financial health! Keep it up.";
+        else if (totalScore >= 70) advice = "Good shape. Focus on growing your emergency reserve.";
+        else if (totalScore >= 55) advice = "Room to improve. Try to reduce spending and build savings.";
+        else if (totalScore >= 40) advice = "Financial health needs attention. Review your largest expense categories.";
+        else advice = "Critical: prioritize building savings and reducing expenses immediately.";
+
+        Map<String, Integer> breakdown = new HashMap<>();
+        breakdown.put("savingsRate", savingsScore);
+        breakdown.put("budgetAdherence", budgetScore);
+        breakdown.put("spendingTrend", trendScore);
+        breakdown.put("hasInvestments", investmentScore);
+        breakdown.put("emergencyReserve", reserveScore);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("score", totalScore);
+        result.put("grade", grade);
+        result.put("breakdown", breakdown);
+        result.put("advice", advice);
+        return result;
+    }
+
     public Map<String, Double> getIncomeBySource(int month, int year) {
         YearMonth ym = YearMonth.of(year, month);
         LocalDateTime start = ym.atDay(1).atStartOfDay();

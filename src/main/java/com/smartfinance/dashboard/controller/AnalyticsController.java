@@ -51,4 +51,9 @@ public class AnalyticsController {
         int y = year  > 0 ? year  : now.getYear();
         return ResponseEntity.ok(analyticsService.getIncomeBySource(m, y));
     }
+
+    @GetMapping("/health-score")
+    public ResponseEntity<Map<String, Object>> getHealthScore() {
+        return ResponseEntity.ok(analyticsService.getHealthScore());
+    }
 }

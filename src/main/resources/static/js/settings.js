@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadAndDisplayRates();
     loadStorageTypes();
     loadIncomeSources();
+    loadCategorizationRules();
 });
 
 // ── Persistence ───────────────────────────────────────────────────────────────
@@ -311,3 +312,106 @@ async function deleteIncomeSource(id, name) {
 
 // Escape single-quotes for inline onclick attributes
 function escQ(str) { return str.replace(/'/g, "\\'"); }
+
+// ── Categorization Rules Management ──────────────────────────────────────────
+async function loadCategorizationRules() {
+    const list = document.getElementById('categorizationRulesList');
+    if (!list) return;
+    try {
+        const rules = await apiGet('/categorization-rules');
+        if (rules.length === 0) {
+            list.innerHTML = '<p class="text-gray-400 text-sm">No rules yet. Add a rule to auto-categorize imported transactions.</p>';
+            return;
+        }
+        list.innerHTML = rules.map(r => `
+            <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <div class="flex items-center gap-3 flex-1 min-w-0">
+                    <span class="font-mono text-sm bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded">${r.pattern}</span>
+                    <span class="text-gray-400 text-xs">→</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">${r.category}</span>
+                    ${r.transactionType ? `<span class="text-xs text-gray-400">(${r.transactionType})</span>` : ''}
+                    <span class="text-xs text-gray-400">priority: ${r.priority}</span>
+                </div>
+                <div class="flex gap-2 flex-shrink-0 ml-2">
+                    <button onclick="editRule(${r.id},'${escQ(r.pattern)}','${escQ(r.category)}','${r.transactionType || ''}',${r.priority})"
+                        class="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Edit</button>
+                    <button onclick="deleteRule(${r.id},'${escQ(r.pattern)}')"
+                        class="text-xs text-red-600 hover:text-red-800 dark:text-red-400">Delete</button>
+                </div>
+            </div>`).join('');
+    } catch (e) {
+        list.innerHTML = '<p class="text-red-400 text-sm">Failed to load rules.</p>';
+    }
+}
+
+async function loadRuleCategories() {
+    const select = document.getElementById('ruleCategory');
+    if (!select) return;
+    try {
+        const cats = await apiGet('/categories/active');
+        select.innerHTML = cats.map(c => `<option value="${c.name}">${c.icon} ${c.name}</option>`).join('');
+    } catch (e) {
+        select.innerHTML = '<option value="Other">Other</option>';
+    }
+}
+
+function showAddRuleModal() {
+    document.getElementById('ruleModalTitle').textContent = 'Add Rule';
+    document.getElementById('ruleId').value = '';
+    document.getElementById('rulePattern').value = '';
+    document.getElementById('ruleType').value = '';
+    document.getElementById('rulePriority').value = '0';
+    loadRuleCategories();
+    document.getElementById('ruleModal').classList.remove('hidden');
+}
+
+function editRule(id, pattern, category, type, priority) {
+    document.getElementById('ruleModalTitle').textContent = 'Edit Rule';
+    document.getElementById('ruleId').value = id;
+    document.getElementById('rulePattern').value = pattern;
+    document.getElementById('ruleType').value = type || '';
+    document.getElementById('rulePriority').value = priority;
+    loadRuleCategories().then(() => {
+        document.getElementById('ruleCategory').value = category;
+    });
+    document.getElementById('ruleModal').classList.remove('hidden');
+}
+
+function closeRuleModal() {
+    document.getElementById('ruleModal').classList.add('hidden');
+}
+
+async function saveRule() {
+    const id = document.getElementById('ruleId').value;
+    const pattern = document.getElementById('rulePattern').value.trim();
+    const category = document.getElementById('ruleCategory').value;
+    const transactionType = document.getElementById('ruleType').value || null;
+    const priority = parseInt(document.getElementById('rulePriority').value) || 0;
+    if (!pattern) { showError('Pattern is required.'); return; }
+    if (!category) { showError('Category is required.'); return; }
+    try {
+        if (id) {
+            await apiPut(`/categorization-rules/${id}`, { pattern, category, transactionType, priority });
+            showSuccess('Rule updated.');
+        } else {
+            await apiPost('/categorization-rules', { pattern, category, transactionType, priority });
+            showSuccess('Rule added.');
+        }
+        closeRuleModal();
+        loadCategorizationRules();
+    } catch (e) {
+        showError(e.message || 'Failed to save rule.');
+    }
+}
+
+async function deleteRule(id, pattern) {
+    if (!confirm(`Delete rule for pattern "${pattern}"?`)) return;
+    try {
+        await apiDelete(`/categorization-rules/${id}`);
+        showSuccess(`Rule deleted.`);
+        loadCategorizationRules();
+    } catch (e) {
+        showError(e.message || 'Failed to delete rule.');
+    }
+}
+
