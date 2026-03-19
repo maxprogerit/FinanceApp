@@ -7,10 +7,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadSettings();
     updateDarkModeToggle();
     buildConverterSelects();
+    initExportDates();
     await loadAndDisplayRates();
     loadStorageTypes();
     loadIncomeSources();
     loadCategorizationRules();
+    loadForecast();
+    loadPlanStatus();
 });
 
 // ── Persistence ───────────────────────────────────────────────────────────────
@@ -415,3 +418,86 @@ async function deleteRule(id, pattern) {
     }
 }
 
+// ── Export & Reports ──────────────────────────────────────────────────────────
+function initExportDates() {
+    const now      = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const today    = now.toISOString().split('T')[0];
+    const monthVal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const fromEl   = document.getElementById('exportFrom');
+    const toEl     = document.getElementById('exportTo');
+    const mEl      = document.getElementById('reportMonth');
+    if (fromEl) fromEl.value = firstDay;
+    if (toEl)   toEl.value   = today;
+    if (mEl)    mEl.value    = monthVal;
+}
+
+function exportCSV() {
+    const from = document.getElementById('exportFrom')?.value;
+    const to   = document.getElementById('exportTo')?.value;
+    if (!from || !to) { showError('Please select a date range.'); return; }
+    window.location.href = `${API}/export/transactions/csv?startDate=${encodeURIComponent(from + 'T00:00:00')}&endDate=${encodeURIComponent(to + 'T23:59:59')}`;
+}
+
+function exportPDF() {
+    const monthVal = document.getElementById('reportMonth')?.value;
+    if (!monthVal) { showError('Please select a month.'); return; }
+    const [year, month] = monthVal.split('-');
+    window.location.href = `${API}/export/report/pdf?year=${year}&month=${month}`;
+}
+
+async function loadForecast() {
+    const container = document.getElementById('forecastContainer');
+    if (!container) return;
+    try {
+        const data = await apiGet('/forecast/spending');
+        if (!data || Object.keys(data).length === 0) {
+            container.innerHTML = `<p class="text-sm text-gray-500 dark:text-gray-400">Not enough data yet. Add more transactions over multiple months.</p>`;
+            return;
+        }
+        const riskLow = (data.riskLevel || '').toLowerCase() !== 'high';
+        container.innerHTML = `
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                    <p class="text-xs text-blue-600 dark:text-blue-400 font-medium">Predicted Spending</p>
+                    <p class="text-xl font-bold text-blue-700 dark:text-blue-300 mt-1">${formatCurrency(data.predictedSpending || 0)}</p>
+                </div>
+                <div class="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-4">
+                    <p class="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Monthly Average</p>
+                    <p class="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">${formatCurrency(data.averageSpending || 0)}</p>
+                </div>
+                <div class="${riskLow ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-red-50 dark:bg-red-900/20'} rounded-lg p-4">
+                    <p class="text-xs font-medium ${riskLow ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-600 dark:text-red-400'}">Budget Risk</p>
+                    <p class="text-xl font-bold mt-1 ${riskLow ? 'text-yellow-700 dark:text-yellow-300' : 'text-red-700 dark:text-red-300'}">${data.riskLevel || 'LOW'}</p>
+                </div>
+            </div>
+            ${data.message ? `<p class="mt-3 text-xs text-gray-600 dark:text-gray-400">${data.message}</p>` : ''}`;
+    } catch (_) {
+        container.innerHTML = `<p class="text-sm text-gray-500 dark:text-gray-400">Could not load forecast.</p>`;
+    }
+}
+
+// ── Subscription plan status ──────────────────────────────────────────────────
+async function loadPlanStatus() {
+    try {
+        const status = await apiGet('/payments/status');
+        const planEl = document.getElementById('planStatus');
+        if (!planEl || !status) return;
+        const plan     = status.plan || 'FREE';
+        const subStatus = status.status || '';
+        const isPro    = plan === 'PRO' && (subStatus === 'active' || subStatus === 'trialing');
+        planEl.innerHTML = isPro
+            ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">PRO</span>
+               <span class="text-xs text-gray-500 dark:text-gray-400">${subStatus === 'trialing' ? 'Trial active' : 'Active subscription'}</span>`
+            : `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">FREE</span>
+               <span class="text-xs text-gray-500 dark:text-gray-400">Upgrade for CSV import and advanced features</span>`;
+    } catch (_) { /* silent — payments may not be configured */ }
+}
+
+async function handleUpgrade(e) {
+    e.preventDefault();
+    try {
+        const res = await apiPost('/payments/checkout', {});
+        if (res?.url) window.location.href = res.url;
+    } catch (_) { showError('Could not start checkout. Please check Stripe configuration.'); }
+}

@@ -1,0 +1,34 @@
+[Unit]
+Description=Smart Finance Dashboard Spring Boot Application
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=financeapp
+Group=financeapp
+WorkingDirectory=/opt/financeapp
+
+# Load environment variables from file (secured with chmod 600)
+EnvironmentFile=/opt/financeapp/.env
+
+# Run the application with production profile
+ExecStart=/usr/bin/java \
+    -Xms256m \
+    -Xmx512m \
+    -jar /opt/financeapp/dashboard-1.0.0.jar \
+    --spring.profiles.active=prod
+
+# Auto-restart on crash
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/var/log/financeapp/app.log
+StandardError=append:/var/log/financeapp/app.log
+
+# Limit capabilities for security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

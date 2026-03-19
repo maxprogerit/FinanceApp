@@ -2,6 +2,7 @@ package com.smartfinance.dashboard.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,37 +14,42 @@ public class FinancialGoal {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     @Column(nullable = false)
     private String goalName;
-    
+
     private String description;
-    
+
     @Column(nullable = false)
     private BigDecimal targetAmount;
-    
+
     @Column(nullable = false)
     private BigDecimal currentAmount = BigDecimal.ZERO;
-    
+
     @Column(nullable = false)
     private String currency;
-    
+
     @Column(nullable = false)
     private LocalDate targetDate;
-    
+
     @Column(nullable = false)
     private LocalDate startDate;
-    
+
     private String category; // EMERGENCY_FUND, VACATION, CAR, HOUSE, EDUCATION, RETIREMENT
-    
+
     @Column(nullable = false)
     private String status = "IN_PROGRESS"; // IN_PROGRESS, COMPLETED, ABANDONED
-    
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
-    
+
     private LocalDateTime updatedAt;
-    
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -51,16 +57,16 @@ public class FinancialGoal {
             startDate = LocalDate.now();
         }
     }
-    
+
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-    
+
     public BigDecimal getRemainingAmount() {
         return targetAmount.subtract(currentAmount);
     }
-    
+
     public double getProgressPercentage() {
         if (targetAmount.compareTo(BigDecimal.ZERO) == 0) {
             return 0;
@@ -69,7 +75,7 @@ public class FinancialGoal {
                 .multiply(BigDecimal.valueOf(100))
                 .doubleValue();
     }
-    
+
     public long getDaysRemaining() {
         return java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), targetDate);
     }

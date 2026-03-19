@@ -2,6 +2,8 @@ package com.smartfinance.dashboard.service;
 
 import com.smartfinance.dashboard.model.Alert;
 import com.smartfinance.dashboard.model.Transaction;
+import com.smartfinance.dashboard.model.User;
+import com.smartfinance.dashboard.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,7 +18,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SubscriptionService {
 
-    private final TransactionService transactionService;
+    private final TransactionRepository transactionRepository;
     private final AlertService alertService;
 
     public static class SubscriptionSummary {
@@ -40,8 +42,8 @@ public class SubscriptionService {
         }
     }
 
-    public List<SubscriptionSummary> detectSubscriptions() {
-        List<Transaction> all = transactionService.getAllTransactions();
+    public List<SubscriptionSummary> detectSubscriptions(User user) {
+        List<Transaction> all = transactionRepository.findByUser(user);
         List<SubscriptionSummary> results = new ArrayList<>();
         Set<String> seen = new HashSet<>();
 
@@ -91,15 +93,15 @@ public class SubscriptionService {
         return results;
     }
 
-    public List<SubscriptionSummary> getUpcomingSubscriptions(int days) {
+    public List<SubscriptionSummary> getUpcomingSubscriptions(int days, User user) {
         LocalDateTime cutoff = LocalDateTime.now().plusDays(days);
-        return detectSubscriptions().stream()
+        return detectSubscriptions(user).stream()
                 .filter(s -> s.nextExpectedCharge != null && !s.nextExpectedCharge.isAfter(cutoff))
                 .collect(Collectors.toList());
     }
 
-    public void createUpcomingAlerts() {
-        List<SubscriptionSummary> upcoming = getUpcomingSubscriptions(7);
+    public void createUpcomingAlerts(User user) {
+        List<SubscriptionSummary> upcoming = getUpcomingSubscriptions(7, user);
         List<Alert> existing = alertService.getAllAlerts();
 
         for (SubscriptionSummary sub : upcoming) {

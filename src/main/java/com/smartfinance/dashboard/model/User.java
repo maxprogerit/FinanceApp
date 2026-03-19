@@ -2,6 +2,7 @@ package com.smartfinance.dashboard.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.LocalDateTime;
 
 @Entity
@@ -19,6 +20,7 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @JsonIgnore
     @Column(nullable = false)
     private String password;
 
@@ -27,6 +29,21 @@ public class User {
     private String baseCurrency = "USD";
 
     private String theme = "light";
+
+    // OAuth2 provider (null for local accounts, "google" for OAuth2)
+    private String provider;
+    private String providerId;
+
+    // Email verification
+    private Boolean emailVerified = false;
+    @JsonIgnore
+    private String emailVerificationToken;
+
+    // Password reset
+    @JsonIgnore
+    private String passwordResetToken;
+    @JsonIgnore
+    private LocalDateTime passwordResetExpiry;
 
     private LocalDateTime createdAt;
 

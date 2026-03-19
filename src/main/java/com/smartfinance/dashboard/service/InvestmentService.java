@@ -1,6 +1,7 @@
 package com.smartfinance.dashboard.service;
 
 import com.smartfinance.dashboard.model.Investment;
+import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.repository.InvestmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,22 +15,22 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class InvestmentService {
-    
+
     private final InvestmentRepository investmentRepository;
-    
+
     @Transactional
-    public Investment createInvestment(Investment investment) {
+    public Investment createInvestment(Investment investment, User user) {
+        investment.setUser(user);
         if (investment.getCurrentPrice() == null) {
             investment.setCurrentPrice(investment.getPurchasePrice());
         }
         return investmentRepository.save(investment);
     }
-    
+
     @Transactional
-    public Investment updateInvestment(Long id, Investment investment) {
-        Investment existing = investmentRepository.findById(id)
+    public Investment updateInvestment(Long id, Investment investment, User user) {
+        Investment existing = investmentRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new RuntimeException("Investment not found"));
-        
         existing.setAssetType(investment.getAssetType());
         existing.setSymbol(investment.getSymbol());
         existing.setAssetName(investment.getAssetName());
@@ -39,65 +40,63 @@ public class InvestmentService {
         existing.setCurrency(investment.getCurrency());
         existing.setPurchaseDate(investment.getPurchaseDate());
         existing.setNotes(investment.getNotes());
-        
         return investmentRepository.save(existing);
     }
-    
+
     @Transactional
-    public void deleteInvestment(Long id) {
+    public void deleteInvestment(Long id, User user) {
+        investmentRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new RuntimeException("Investment not found"));
         investmentRepository.deleteById(id);
     }
-    
-    public Investment getInvestmentById(Long id) {
-        return investmentRepository.findById(id)
+
+    public Investment getInvestmentById(Long id, User user) {
+        return investmentRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new RuntimeException("Investment not found"));
     }
-    
-    public List<Investment> getAllInvestments() {
-        return investmentRepository.findAll();
+
+    public List<Investment> getAllInvestments(User user) {
+        return investmentRepository.findByUser(user);
     }
-    
-    public List<Investment> getInvestmentsByAssetType(String assetType) {
-        return investmentRepository.findByAssetType(assetType);
+
+    public List<Investment> getInvestmentsByAssetType(String assetType, User user) {
+        return investmentRepository.findByAssetTypeAndUser(assetType, user);
     }
-    
-    public BigDecimal getTotalPortfolioValue() {
-        BigDecimal value = investmentRepository.getCurrentPortfolioValue();
+
+    public BigDecimal getTotalPortfolioValue(User user) {
+        BigDecimal value = investmentRepository.getCurrentPortfolioValueForUser(user);
         return value != null ? value : BigDecimal.ZERO;
     }
-    
-    public BigDecimal getTotalInvestmentValue() {
-        BigDecimal value = investmentRepository.getTotalInvestmentValue();
+
+    public BigDecimal getTotalInvestmentValue(User user) {
+        BigDecimal value = investmentRepository.getTotalInvestmentValueForUser(user);
         return value != null ? value : BigDecimal.ZERO;
     }
-    
-    public BigDecimal getTotalProfitLoss() {
-        return getTotalPortfolioValue().subtract(getTotalInvestmentValue());
+
+    public BigDecimal getTotalProfitLoss(User user) {
+        return getTotalPortfolioValue(user).subtract(getTotalInvestmentValue(user));
     }
-    
-    public double getTotalProfitLossPercentage() {
-        BigDecimal investment = getTotalInvestmentValue();
+
+    public double getTotalProfitLossPercentage(User user) {
+        BigDecimal investment = getTotalInvestmentValue(user);
         if (investment.compareTo(BigDecimal.ZERO) == 0) {
             return 0;
         }
-        return getTotalProfitLoss()
+        return getTotalProfitLoss(user)
                 .divide(investment, 4, java.math.RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100))
                 .doubleValue();
     }
-    
-    public Map<String, BigDecimal> getPortfolioByAssetType() {
-        List<Object[]> results = investmentRepository.getTotalInvestmentByAssetType();
+
+    public Map<String, BigDecimal> getPortfolioByAssetType(User user) {
+        List<Object[]> results = investmentRepository.getTotalInvestmentByAssetTypeForUser(user);
         return results.stream()
-                .collect(Collectors.toMap(
-                        r -> (String) r[0],
-                        r -> (BigDecimal) r[1]
-                ));
+                .collect(Collectors.toMap(r -> (String) r[0], r -> (BigDecimal) r[1]));
     }
-    
+
     @Transactional
-    public void updateInvestmentPrice(Long id, BigDecimal newPrice) {
-        Investment investment = getInvestmentById(id);
+    public void updateInvestmentPrice(Long id, BigDecimal newPrice, User user) {
+        Investment investment = getInvestmentById(id, user);
         investment.setCurrentPrice(newPrice);
         investmentRepository.save(investment);
     }

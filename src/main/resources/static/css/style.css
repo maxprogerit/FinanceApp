@@ -130,16 +130,50 @@ select.input, select.form-input {
 .modal-content {
     background-color: #ffffff;
     border-radius: 1rem;
-    padding: 1.5rem;
+    padding: 0;
     max-width: 42rem;
     width: 100%;
     max-height: 90vh;
     overflow-y: auto;
+    overflow-x: hidden;
     box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
 }
 .dark .modal-content {
     background-color: #1F2937;
     color: #F9FAFB;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid #E5E7EB;
+}
+.dark .modal-header { border-color: #374151; }
+
+.modal-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111827;
+}
+.dark .modal-title { color: #F9FAFB; }
+
+.modal-close {
+    color: #9CA3AF;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+}
+.modal-close:hover { color: #374151; }
+.dark .modal-close:hover { color: #D1D5DB; }
+
+.modal-body {
+    padding: 1.5rem;
 }
 
 /* ─── Badge ──────────────────────────────────────────────────── */
@@ -590,8 +624,90 @@ body.sidebar-collapsed #app-header { left: var(--sidebar-collapsed-width); }
 .metric-neutral  { color: #6B7280; }
 
 /* ─── Card hover effect ──────────────────────────────────────── */
-.card { transition: background-color 0.3s, color 0.3s, box-shadow 0.2s; }
+.card { transition: background-color 0.3s, color 0.3s, box-shadow 0.22s, transform 0.22s; }
 .card:hover { box-shadow: var(--shadow-md); }
+
+/* ─── Metric Cards with Background Images ───────────────────── */
+.metric-card {
+    position: relative;
+    background-size: cover;
+    background-position: center;
+    padding: 0;
+    transition: transform 0.22s ease, box-shadow 0.22s ease;
+}
+.metric-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 28px -6px rgba(0,0,0,0.18), 0 6px 10px -4px rgba(0,0,0,0.1);
+}
+.metric-card-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.87);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    pointer-events: none;
+}
+.dark .metric-card-overlay { background: rgba(17, 24, 39, 0.84); }
+.metric-card-content {
+    position: relative;
+    z-index: 1;
+    padding: 1.5rem;
+}
+
+/* ─── Card with no padding (full-bleed tables) ──────────────── */
+.card-table { padding: 0; }
+
+/* ─── Modern Table ───────────────────────────────────────────── */
+.table-modern {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+.table-modern thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #F9FAFB;
+}
+.dark .table-modern thead { background: #111827; }
+
+.table-modern thead th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #6B7280;
+    white-space: nowrap;
+    border-bottom: 2px solid #E5E7EB;
+}
+.dark .table-modern thead th {
+    color: #9CA3AF;
+    border-bottom-color: #374151;
+}
+.table-modern thead th.col-right,
+.table-modern tbody td.col-right { text-align: right; }
+
+.table-modern tbody tr {
+    transition: background-color 0.12s ease;
+    border-bottom: 1px solid #F3F4F6;
+}
+.dark .table-modern tbody tr { border-bottom-color: #1F2937; }
+.table-modern tbody tr:last-child { border-bottom: none; }
+.table-modern tbody tr:hover { background-color: #EEF2FF; }
+.dark .table-modern tbody tr:hover { background-color: rgba(99,102,241,0.08); }
+
+.table-modern tbody td {
+    padding: 0.875rem 1rem;
+    color: #374151;
+    vertical-align: middle;
+}
+.dark .table-modern tbody td { color: #D1D5DB; }
+.table-modern td.col-mono {
+    font-family: ui-monospace, 'Cascadia Code', monospace;
+    font-size: 0.8125rem;
+}
 
 /* ─── Sidebar backdrop (mobile) ──────────────────────────────── */
 #sidebar-backdrop {

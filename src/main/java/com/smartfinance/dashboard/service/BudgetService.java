@@ -2,6 +2,7 @@ package com.smartfinance.dashboard.service;
 
 import com.smartfinance.dashboard.model.Budget;
 import com.smartfinance.dashboard.model.Transaction;
+import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.repository.BudgetRepository;
 import com.smartfinance.dashboard.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +25,6 @@ public class BudgetService {
     private final TransactionRepository transactionRepository;
     private final CurrencyService currencyService;
 
-    /** Convert amount from one currency to another using live/cached rates. */
     private BigDecimal convertToBudgetCurrency(BigDecimal amount, String fromCurrency, String toCurrency) {
         if (fromCurrency == null || toCurrency == null || fromCurrency.equals(toCurrency)) return amount;
         Map<String, Double> rates = currencyService.getRatesFromUSD();
@@ -37,15 +37,15 @@ public class BudgetService {
     }
 
     @Transactional
-    public Budget createBudget(Budget budget) {
+    public Budget createBudget(Budget budget, User user) {
+        budget.setUser(user);
         return budgetRepository.save(budget);
     }
 
     @Transactional
-    public Budget updateBudget(Long id, Budget budget) {
-        Budget existing = budgetRepository.findById(id)
+    public Budget updateBudget(Long id, Budget budget, User user) {
+        Budget existing = budgetRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
-
         existing.setCategory(budget.getCategory());
         existing.setLimitAmount(budget.getLimitAmount());
         existing.setPeriod(budget.getPeriod());
@@ -55,45 +55,45 @@ public class BudgetService {
         if (budget.getIsActive() != null) {
             existing.setIsActive(budget.getIsActive());
         }
-
         return budgetRepository.save(existing);
     }
 
     @Transactional
-    public void deleteBudget(Long id) {
+    public void deleteBudget(Long id, User user) {
+        budgetRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new RuntimeException("Budget not found"));
         budgetRepository.deleteById(id);
     }
 
-    public Budget getBudgetById(Long id) {
-        return budgetRepository.findById(id)
+    public Budget getBudgetById(Long id, User user) {
+        return budgetRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new RuntimeException("Budget not found"));
     }
 
-    public List<Budget> getAllBudgets() {
-        return budgetRepository.findAll();
+    public List<Budget> getAllBudgets(User user) {
+        return budgetRepository.findByUser(user);
     }
 
-    public List<Budget> getActiveBudgets() {
-        return budgetRepository.findActiveBudgetsForDate(LocalDate.now());
+    public List<Budget> getActiveBudgets(User user) {
+        return budgetRepository.findActiveBudgetsForDateAndUser(LocalDate.now(), user);
     }
 
     @Transactional
-    public void updateBudgetSpending(String category, BigDecimal amount, String transactionCurrency) {
-        budgetRepository.findActiveBudgetByCategoryAndDate(category, LocalDate.now())
+    public void updateBudgetSpending(String category, BigDecimal amount, String transactionCurrency, User user) {
+        budgetRepository.findActiveBudgetByCategoryAndDateAndUser(category, LocalDate.now(), user)
                 .ifPresent(budget -> {
                     String budgetCurrency = budget.getCurrency() != null ? budget.getCurrency() : "USD";
                     BigDecimal converted = convertToBudgetCurrency(amount, transactionCurrency, budgetCurrency);
                     budget.setSpentAmount(budget.getSpentAmount().add(converted));
                     budgetRepository.save(budget);
 
-                    double percentageUsed = budget.getPercentageUsed();
-                    if (percentageUsed >= 90 && percentageUsed < 100) {
-                        alertService.createBudgetAlert(budget, "WARNING",
+                    double pct = budget.getPercentageUsed();
+                    if (pct >= 90 && pct < 100) {
+                        alertService.createBudgetAlert(budget, user, "WARNING",
                                 "Budget Alert: 90% Limit Reached",
-                                String.format("Your %s budget is at %.1f%% of its limit.",
-                                        category, percentageUsed));
-                    } else if (percentageUsed >= 100) {
-                        alertService.createBudgetAlert(budget, "CRITICAL",
+                                String.format("Your %s budget is at %.1f%% of its limit.", category, pct));
+                    } else if (pct >= 100) {
+                        alertService.createBudgetAlert(budget, user, "CRITICAL",
                                 "Budget Exceeded!",
                                 String.format("Your %s budget has exceeded its limit by %s.",
                                         category, budget.getRemainingAmount().abs()));
@@ -101,21 +101,16 @@ public class BudgetService {
                 });
     }
 
-    /**
-     * Recomputes spentAmount for all budgets by summing actual EXPENSE transactions
-     * within each budget's date range and category, converting each transaction's
-     * currency to the budget's currency. Fixes drift caused by manual DB edits or migration.
-     */
     @Transactional
-    public int recalculateAllBudgetSpending() {
-        List<Budget> budgets = budgetRepository.findAll();
+    public int recalculateAllBudgetSpending(User user) {
+        List<Budget> budgets = budgetRepository.findByUser(user);
         for (Budget budget : budgets) {
             LocalDateTime start = budget.getStartDate().atStartOfDay();
             LocalDateTime end   = budget.getEndDate().atTime(23, 59, 59, 999999999);
             String budgetCurrency = budget.getCurrency() != null ? budget.getCurrency() : "USD";
 
             List<Transaction> expenses = transactionRepository
-                    .findByTypeAndTransactionDateBetween("EXPENSE", start, end)
+                    .findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, start, end)
                     .stream()
                     .filter(t -> budget.getCategory().equals(t.getCategory()))
                     .toList();
@@ -125,14 +120,13 @@ public class BudgetService {
                 totalSpent = totalSpent.add(
                         convertToBudgetCurrency(tx.getAmount(), tx.getCurrency(), budgetCurrency));
             }
-
             budget.setSpentAmount(totalSpent);
             budgetRepository.save(budget);
         }
         return budgets.size();
     }
 
-    public List<Budget> getBudgetsExceedingThreshold(double threshold) {
-        return budgetRepository.findBudgetsExceedingThreshold(threshold);
+    public List<Budget> getBudgetsExceedingThreshold(double threshold, User user) {
+        return budgetRepository.findBudgetsExceedingThresholdForUser(threshold, user);
     }
 }

@@ -98,22 +98,22 @@
             </div>
 
             <!-- Transactions Table -->
-            <div class="card overflow-hidden">
+            <div class="card card-table overflow-hidden">
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                        <thead class="bg-gray-50 dark:bg-gray-800">
+                    <table class="table-modern min-w-full">
+                        <thead>
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Type</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Category</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Storage</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Description</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Tags</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Amount</th>
-                                <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Category</th>
+                                <th>Storage</th>
+                                <th>Description</th>
+                                <th>Tags</th>
+                                <th class="col-right">Amount</th>
+                                <th class="col-right">Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="transactionsTable" class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                        <tbody id="transactionsTable">
                             <!-- Transactions will be loaded here -->
                         </tbody>
                     </table>
@@ -124,7 +124,7 @@
 
     <!-- Add/Edit Transaction Modal -->
     <div id="transactionModal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content p-6">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="modalTitle">Add Transaction</h3>
                 <button id="closeModal" class="text-gray-400 hover:text-gray-600">

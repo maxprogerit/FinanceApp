@@ -1,7 +1,8 @@
 package com.smartfinance.dashboard.service;
 
-import com.smartfinance.dashboard.model.Debt;
 import com.smartfinance.dashboard.model.Alert;
+import com.smartfinance.dashboard.model.Debt;
+import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.repository.DebtRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,13 +24,14 @@ public class DebtService {
     private final AlertService alertService;
 
     @Transactional
-    public Debt createDebt(Debt debt) {
+    public Debt createDebt(Debt debt, User user) {
+        debt.setUser(user);
         return debtRepository.save(debt);
     }
 
     @Transactional
-    public Debt updateDebt(Long id, Debt updated) {
-        Debt existing = debtRepository.findById(id)
+    public Debt updateDebt(Long id, Debt updated, User user) {
+        Debt existing = debtRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new RuntimeException("Debt not found"));
         existing.setName(updated.getName());
         existing.setAmount(updated.getAmount());
@@ -41,29 +43,31 @@ public class DebtService {
     }
 
     @Transactional
-    public void deleteDebt(Long id) {
+    public void deleteDebt(Long id, User user) {
+        debtRepository.findByIdAndUser(id, user)
+                .orElseThrow(() -> new RuntimeException("Debt not found"));
         debtRepository.deleteById(id);
     }
 
     @Transactional
-    public Debt settleDebt(Long id) {
-        Debt debt = debtRepository.findById(id)
+    public Debt settleDebt(Long id, User user) {
+        Debt debt = debtRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new RuntimeException("Debt not found"));
         debt.setStatus("SETTLED");
         debt.setSettledAt(LocalDateTime.now());
         return debtRepository.save(debt);
     }
 
-    public List<Debt> getAllDebts() {
-        return debtRepository.findAll();
+    public List<Debt> getAllDebts(User user) {
+        return debtRepository.findByUser(user);
     }
 
-    public List<Debt> getActiveDebts() {
-        return debtRepository.findByStatus("ACTIVE");
+    public List<Debt> getActiveDebts(User user) {
+        return debtRepository.findByUserAndStatus(user, "ACTIVE");
     }
 
-    public Map<String, Object> getSummary() {
-        List<Debt> active = getActiveDebts();
+    public Map<String, Object> getSummary(User user) {
+        List<Debt> active = getActiveDebts(user);
         BigDecimal totalIOwe = active.stream()
                 .filter(d -> "I_OWE".equals(d.getDirection()))
                 .map(Debt::getAmount)
@@ -79,9 +83,9 @@ public class DebtService {
         return summary;
     }
 
-    public void createDueSoonAlerts() {
+    public void createDueSoonAlerts(User user) {
         LocalDate today = LocalDate.now();
-        for (Debt debt : getActiveDebts()) {
+        for (Debt debt : getActiveDebts(user)) {
             if (debt.getDueDate() == null) continue;
             long daysUntilDue = ChronoUnit.DAYS.between(today, debt.getDueDate());
             if (daysUntilDue >= 0 && daysUntilDue <= 3) {
@@ -91,12 +95,12 @@ public class DebtService {
                 String message = direction + " " + debt.getAmount() + " " + debt.getCurrency()
                         + " — due in " + daysUntilDue + " day(s).";
 
-                // Avoid duplicate alerts within last 7 days
-                boolean exists = alertService.getAllAlerts().stream()
+                boolean exists = alertService.getAllAlerts(user).stream()
                         .anyMatch(a -> title.equals(a.getTitle())
                                 && a.getCreatedAt().isAfter(LocalDateTime.now().minusDays(7)));
                 if (!exists) {
                     Alert alert = new Alert();
+                    alert.setUser(user);
                     alert.setType("DEBT_REMINDER");
                     alert.setSeverity(severity);
                     alert.setTitle(title);

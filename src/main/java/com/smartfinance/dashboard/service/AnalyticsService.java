@@ -1,6 +1,7 @@
 package com.smartfinance.dashboard.service;
 
 import com.smartfinance.dashboard.model.Transaction;
+import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,9 +15,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Analytics service — all monetary aggregations normalize amounts to USD first,
- * so the frontend can call formatCurrency(value) with the default storedCurrency='USD'
- * and get correct display-currency conversion regardless of how transactions were stored.
+ * Analytics service — all monetary aggregations normalize to USD first.
+ * Every public method is now scoped to the authenticated User.
  */
 @Service
 @RequiredArgsConstructor
@@ -27,9 +27,8 @@ public class AnalyticsService {
     private final TransactionRepository transactionRepository;
     private final CurrencyService currencyService;
 
-    // ── Currency helpers ───────────────────────────────────────────────────────
+    // ── Currency helpers ──────────────────────────────────────────────────────
 
-    /** Convert any amount to USD using live/cached rates. */
     private BigDecimal convertToUSD(BigDecimal amount, String currency) {
         if (amount == null) return BigDecimal.ZERO;
         String ccy = (currency != null && !currency.isBlank()) ? currency : "USD";
@@ -40,14 +39,12 @@ public class AnalyticsService {
                      .setScale(2, RoundingMode.HALF_UP);
     }
 
-    /** Sum a list of transactions, converting each to USD first. */
     private BigDecimal sumInUSD(List<Transaction> txList) {
         return txList.stream()
                 .map(t -> convertToUSD(t.getAmount(), t.getCurrency()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    /** Group transactions by category and sum each group in USD. */
     private Map<String, BigDecimal> sumByCategoryInUSD(List<Transaction> txList) {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         for (Transaction t : txList) {
@@ -58,10 +55,6 @@ public class AnalyticsService {
         return result;
     }
 
-    /**
-     * Group transactions by day (yyyy-MM-dd string) and sum each day in USD.
-     * Used by getDailyTrends to avoid N×2 DB calls.
-     */
     private Map<String, BigDecimal> groupByDayInUSD(List<Transaction> txList) {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         for (Transaction t : txList) {
@@ -71,10 +64,6 @@ public class AnalyticsService {
         return result;
     }
 
-    /**
-     * Group transactions by YearMonth (yyyy-MM string) and sum each month in USD.
-     * Used by getMonthlyTrends to avoid N×2 DB calls.
-     */
     private Map<String, BigDecimal> groupByMonthInUSD(List<Transaction> txList) {
         Map<String, BigDecimal> result = new LinkedHashMap<>();
         for (Transaction t : txList) {
@@ -84,17 +73,16 @@ public class AnalyticsService {
         return result;
     }
 
-    // ── Dashboard analytics ────────────────────────────────────────────────────
+    // ── Dashboard analytics ───────────────────────────────────────────────────
 
-    public Map<String, Object> getDashboardAnalytics() {
+    public Map<String, Object> getDashboardAnalytics(User user) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime endOfMonth   = now.withDayOfMonth(now.toLocalDate().lengthOfMonth())
                 .withHour(23).withMinute(59).withSecond(59).withNano(999999999);
 
-        // Fetch once per type; convert to USD in Java
-        List<Transaction> incomeList  = transactionRepository.findByTypeAndTransactionDateBetween("INCOME",  startOfMonth, endOfMonth);
-        List<Transaction> expenseList = transactionRepository.findByTypeAndTransactionDateBetween("EXPENSE", startOfMonth, endOfMonth);
+        List<Transaction> incomeList  = transactionRepository.findByTypeAndUserAndTransactionDateBetween("INCOME",  user, startOfMonth, endOfMonth);
+        List<Transaction> expenseList = transactionRepository.findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, startOfMonth, endOfMonth);
 
         BigDecimal totalIncome   = sumInUSD(incomeList);
         BigDecimal totalExpenses = sumInUSD(expenseList);
@@ -111,27 +99,25 @@ public class AnalyticsService {
                     .multiply(BigDecimal.valueOf(100)).doubleValue();
         }
         analytics.put("savingsRate", savingsRate);
-
         analytics.put("expensesByCategory", sumByCategoryInUSD(expenseList));
-        analytics.put("activeBudgets",      budgetService.getActiveBudgets());
-        analytics.put("portfolioValue",              investmentService.getTotalPortfolioValue());
-        analytics.put("portfolioProfitLoss",         investmentService.getTotalProfitLoss());
-        analytics.put("portfolioProfitLossPercentage", investmentService.getTotalProfitLossPercentage());
+        analytics.put("activeBudgets",      budgetService.getActiveBudgets(user));
+        analytics.put("portfolioValue",              investmentService.getTotalPortfolioValue(user));
+        analytics.put("portfolioProfitLoss",         investmentService.getTotalProfitLoss(user));
+        analytics.put("portfolioProfitLossPercentage", investmentService.getTotalProfitLossPercentage(user));
 
         return analytics;
     }
 
-    // ── Trend charts ───────────────────────────────────────────────────────────
+    // ── Trend charts ──────────────────────────────────────────────────────────
 
-    public Map<String, Object> getMonthlyTrends(int months) {
-        // Fetch entire date range in 2 DB calls, then group by month in Java
+    public Map<String, Object> getMonthlyTrends(int months, User user) {
         LocalDateTime start = YearMonth.now().minusMonths(months - 1).atDay(1).atStartOfDay();
         LocalDateTime end   = LocalDateTime.now();
 
         Map<String, BigDecimal> incomeByMonth  = groupByMonthInUSD(
-                transactionRepository.findByTypeAndTransactionDateBetween("INCOME",  start, end));
+                transactionRepository.findByTypeAndUserAndTransactionDateBetween("INCOME",  user, start, end));
         Map<String, BigDecimal> expenseByMonth = groupByMonthInUSD(
-                transactionRepository.findByTypeAndTransactionDateBetween("EXPENSE", start, end));
+                transactionRepository.findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, start, end));
 
         List<Map<String, Object>> monthlyData = new ArrayList<>();
         for (int i = months - 1; i >= 0; i--) {
@@ -142,21 +128,19 @@ public class AnalyticsService {
             row.put("expenses", expenseByMonth.getOrDefault(ym, BigDecimal.ZERO));
             monthlyData.add(row);
         }
-
         Map<String, Object> result = new HashMap<>();
         result.put("monthlyData", monthlyData);
         return result;
     }
 
-    public Map<String, Object> getDailyTrends(int days) {
-        // Fetch entire date range in 2 DB calls, then group by day in Java
+    public Map<String, Object> getDailyTrends(int days, User user) {
         LocalDateTime start = LocalDate.now().minusDays(days - 1).atStartOfDay();
         LocalDateTime end   = LocalDateTime.now();
 
         Map<String, BigDecimal> incomeByDay  = groupByDayInUSD(
-                transactionRepository.findByTypeAndTransactionDateBetween("INCOME",  start, end));
+                transactionRepository.findByTypeAndUserAndTransactionDateBetween("INCOME",  user, start, end));
         Map<String, BigDecimal> expenseByDay = groupByDayInUSD(
-                transactionRepository.findByTypeAndTransactionDateBetween("EXPENSE", start, end));
+                transactionRepository.findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, start, end));
 
         List<Map<String, Object>> dailyData = new ArrayList<>();
         for (int i = days - 1; i >= 0; i--) {
@@ -167,22 +151,21 @@ public class AnalyticsService {
             row.put("expenses", expenseByDay.getOrDefault(day, BigDecimal.ZERO));
             dailyData.add(row);
         }
-
         Map<String, Object> result = new HashMap<>();
         result.put("dailyData", dailyData);
         return result;
     }
 
-    // ── Category analysis ──────────────────────────────────────────────────────
+    // ── Category analysis ─────────────────────────────────────────────────────
 
-    public Map<String, Object> getCategoryAnalysis() {
+    public Map<String, Object> getCategoryAnalysis(User user) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime endOfMonth   = now.withDayOfMonth(now.toLocalDate().lengthOfMonth())
                 .withHour(23).withMinute(59).withSecond(59).withNano(999999999);
 
         List<Transaction> expenseList = transactionRepository
-                .findByTypeAndTransactionDateBetween("EXPENSE", startOfMonth, endOfMonth);
+                .findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, startOfMonth, endOfMonth);
 
         Map<String, BigDecimal> expensesByCategory = sumByCategoryInUSD(expenseList);
         BigDecimal totalExpenses = expensesByCategory.values().stream()
@@ -210,9 +193,9 @@ public class AnalyticsService {
         return analysis;
     }
 
-    // ── Insights ───────────────────────────────────────────────────────────────
+    // ── Insights ──────────────────────────────────────────────────────────────
 
-    public List<String> generateFinancialInsights() {
+    public List<String> generateFinancialInsights(User user) {
         List<String> insights = new ArrayList<>();
 
         LocalDateTime now = LocalDateTime.now();
@@ -220,9 +203,9 @@ public class AnalyticsService {
         LocalDateTime endOfMonth   = now.withDayOfMonth(now.toLocalDate().lengthOfMonth())
                 .withHour(23).withMinute(59).withSecond(59).withNano(999999999);
 
-        BigDecimal totalIncome   = sumInUSD(transactionRepository.findByTypeAndTransactionDateBetween("INCOME",  startOfMonth, endOfMonth));
-        BigDecimal totalExpenses = sumInUSD(transactionRepository.findByTypeAndTransactionDateBetween("EXPENSE", startOfMonth, endOfMonth));
-        List<Transaction> expenseList = transactionRepository.findByTypeAndTransactionDateBetween("EXPENSE", startOfMonth, endOfMonth);
+        BigDecimal totalIncome   = sumInUSD(transactionRepository.findByTypeAndUserAndTransactionDateBetween("INCOME",  user, startOfMonth, endOfMonth));
+        BigDecimal totalExpenses = sumInUSD(transactionRepository.findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, startOfMonth, endOfMonth));
+        List<Transaction> expenseList = transactionRepository.findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, startOfMonth, endOfMonth);
         Map<String, BigDecimal> expensesByCategory = sumByCategoryInUSD(expenseList);
 
         if (totalIncome.compareTo(BigDecimal.ZERO) > 0) {
@@ -246,12 +229,12 @@ public class AnalyticsService {
             }
         }
 
-        List budgetsExceeding80 = budgetService.getBudgetsExceedingThreshold(80);
+        List budgetsExceeding80 = budgetService.getBudgetsExceedingThreshold(80, user);
         if (!budgetsExceeding80.isEmpty()) {
             insights.add(String.format("⚠️ You have %d budget(s) exceeding 80%% of their limit", budgetsExceeding80.size()));
         }
 
-        double portfolioPerformance = investmentService.getTotalProfitLossPercentage();
+        double portfolioPerformance = investmentService.getTotalProfitLossPercentage(user);
         if (portfolioPerformance > 0) {
             insights.add(String.format("📈 Your investment portfolio is up %.2f%%", portfolioPerformance));
         } else if (portfolioPerformance < -5) {
@@ -262,14 +245,10 @@ public class AnalyticsService {
         return insights;
     }
 
-    // ── Storage distribution ───────────────────────────────────────────────────
+    // ── Storage distribution ──────────────────────────────────────────────────
 
-    /**
-     * Returns net balance (income − expenses) per storage type, in USD.
-     * Iterates individual transactions so each is converted to USD before summing.
-     */
-    public Map<String, Double> getStorageDistribution() {
-        List<Transaction> all = transactionRepository.findAll();
+    public Map<String, Double> getStorageDistribution(User user) {
+        List<Transaction> all = transactionRepository.findByUser(user);
         Map<String, Double> result = new HashMap<>();
         for (Transaction t : all) {
             if (t.getStorageType() == null || t.getStorageType().isBlank()) continue;
@@ -280,15 +259,15 @@ public class AnalyticsService {
         return result;
     }
 
-    // ── Income by source ───────────────────────────────────────────────────────
+    // ── Income by source ──────────────────────────────────────────────────────
 
-    public Map<String, Double> getIncomeBySource(int month, int year) {
+    public Map<String, Double> getIncomeBySource(int month, int year, User user) {
         YearMonth ym    = YearMonth.of(year, month);
         LocalDateTime start = ym.atDay(1).atStartOfDay();
         LocalDateTime end   = ym.atEndOfMonth().atTime(23, 59, 59, 999_999_999);
 
         List<Transaction> incomeList = transactionRepository
-                .findByTypeAndTransactionDateBetween("INCOME", start, end);
+                .findByTypeAndUserAndTransactionDateBetween("INCOME", user, start, end);
 
         Map<String, Double> result = new LinkedHashMap<>();
         for (Transaction t : incomeList) {
@@ -299,16 +278,16 @@ public class AnalyticsService {
         return result;
     }
 
-    // ── Financial health score ─────────────────────────────────────────────────
+    // ── Financial health score ────────────────────────────────────────────────
 
-    public Map<String, Object> getHealthScore() {
+    public Map<String, Object> getHealthScore(User user) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startOfMonth = now.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
         LocalDateTime endOfMonth   = now.withDayOfMonth(now.toLocalDate().lengthOfMonth())
                 .withHour(23).withMinute(59).withSecond(59).withNano(999999999);
 
-        BigDecimal income   = sumInUSD(transactionRepository.findByTypeAndTransactionDateBetween("INCOME",  startOfMonth, endOfMonth));
-        BigDecimal expenses = sumInUSD(transactionRepository.findByTypeAndTransactionDateBetween("EXPENSE", startOfMonth, endOfMonth));
+        BigDecimal income   = sumInUSD(transactionRepository.findByTypeAndUserAndTransactionDateBetween("INCOME",  user, startOfMonth, endOfMonth));
+        BigDecimal expenses = sumInUSD(transactionRepository.findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, startOfMonth, endOfMonth));
 
         double savingsRate = 0;
         if (income.compareTo(BigDecimal.ZERO) > 0) {
@@ -317,8 +296,8 @@ public class AnalyticsService {
         }
         int savingsScore = (int) Math.min(Math.max(savingsRate, 0), 30);
 
-        List activeBudgets = budgetService.getActiveBudgets();
-        List overBudget    = budgetService.getBudgetsExceedingThreshold(80);
+        List activeBudgets = budgetService.getActiveBudgets(user);
+        List overBudget    = budgetService.getBudgetsExceedingThreshold(80, user);
         int budgetScore;
         if (activeBudgets.isEmpty()) {
             budgetScore = 20;
@@ -331,7 +310,7 @@ public class AnalyticsService {
         LocalDateTime lastStart = lastMonth.atDay(1).atStartOfDay();
         LocalDateTime lastEnd   = lastMonth.atEndOfMonth().atTime(23, 59, 59);
         BigDecimal lastMonthExpenses = sumInUSD(
-                transactionRepository.findByTypeAndTransactionDateBetween("EXPENSE", lastStart, lastEnd));
+                transactionRepository.findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, lastStart, lastEnd));
 
         int trendScore;
         int cmp = expenses.compareTo(lastMonthExpenses);
@@ -339,7 +318,7 @@ public class AnalyticsService {
         else if (cmp == 0 || lastMonthExpenses.compareTo(BigDecimal.ZERO) == 0) trendScore = 10;
         else    trendScore = 0;
 
-        BigDecimal portfolioValue = investmentService.getTotalPortfolioValue();
+        BigDecimal portfolioValue = investmentService.getTotalPortfolioValue(user);
         int investmentScore = portfolioValue.compareTo(BigDecimal.ZERO) > 0 ? 15 : 0;
 
         BigDecimal threeMonthIncome   = BigDecimal.ZERO;
@@ -349,9 +328,9 @@ public class AnalyticsService {
             LocalDateTime s = ym.atDay(1).atStartOfDay();
             LocalDateTime e = ym.atEndOfMonth().atTime(23, 59, 59);
             threeMonthIncome   = threeMonthIncome.add(sumInUSD(
-                    transactionRepository.findByTypeAndTransactionDateBetween("INCOME",  s, e)));
+                    transactionRepository.findByTypeAndUserAndTransactionDateBetween("INCOME",  user, s, e)));
             threeMonthExpenses = threeMonthExpenses.add(sumInUSD(
-                    transactionRepository.findByTypeAndTransactionDateBetween("EXPENSE", s, e)));
+                    transactionRepository.findByTypeAndUserAndTransactionDateBetween("EXPENSE", user, s, e)));
         }
         BigDecimal netSavings3m       = threeMonthIncome.subtract(threeMonthExpenses);
         BigDecimal avgMonthlyExpenses = threeMonthExpenses.divide(BigDecimal.valueOf(3), 2, RoundingMode.HALF_UP);

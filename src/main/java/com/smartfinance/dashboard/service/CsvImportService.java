@@ -1,6 +1,8 @@
 package com.smartfinance.dashboard.service;
 
 import com.smartfinance.dashboard.model.Transaction;
+import com.smartfinance.dashboard.model.User;
+import com.smartfinance.dashboard.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -23,7 +25,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class CsvImportService {
 
-    private final TransactionService transactionService;
+    private final TransactionRepository transactionRepository;
+    private final BudgetService budgetService;
     private final CategorizationRuleService categorizationRuleService;
 
     private static final List<DateTimeFormatter> DATE_FORMATS = List.of(
@@ -46,7 +49,7 @@ public class CsvImportService {
         }
     }
 
-    public ImportResult importFromCsv(MultipartFile file, String defaultCurrency) {
+    public ImportResult importFromCsv(MultipartFile file, String defaultCurrency, User user) {
         ImportResult result = new ImportResult();
 
         try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8);
@@ -110,18 +113,25 @@ public class CsvImportService {
                         amount = amount.negate();
                     }
 
-                    String category = categorizationRuleService.applyRules(description);
+                    String currency = currencyStr.length() > 3 ? currencyStr.substring(0, 3) : currencyStr;
+                    String category = categorizationRuleService.applyRules(description, user);
 
                     Transaction tx = new Transaction();
+                    tx.setUser(user);
                     tx.setType(type);
                     tx.setAmount(amount);
-                    tx.setCurrency(currencyStr.length() > 3 ? currencyStr.substring(0, 3) : currencyStr);
+                    tx.setCurrency(currency);
                     tx.setCategory(category);
                     tx.setDescription(description);
                     tx.setTransactionDate(transactionDate);
                     tx.setIsRecurring(false);
 
-                    transactionService.createTransaction(tx);
+                    transactionRepository.save(tx);
+
+                    if ("EXPENSE".equals(type)) {
+                        budgetService.updateBudgetSpending(category, amount, currency, user);
+                    }
+
                     result.imported++;
 
                 } catch (Exception e) {
