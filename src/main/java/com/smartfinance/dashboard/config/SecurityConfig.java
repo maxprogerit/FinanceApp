@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -18,6 +19,7 @@ import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -34,8 +36,8 @@ public class SecurityConfig {
     private final PasswordEncoder passwordEncoder;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    @Value("${app.base-url:http://localhost:8081}")
-    private String baseUrl;
+    @Value("${app.frontend-url:http://localhost:8081}")
+    private String frontendUrl;
 
     // ── Authentication provider ───────────────────────────────────────────────
 
@@ -65,6 +67,7 @@ public class SecurityConfig {
                 .requestMatchers(
                     "/", "/login", "/register",
                     "/verify-email", "/forgot-password", "/reset-password",
+                    "/resend-verification",
                     "/api/auth/token",
                     "/api/payments/webhook",  // Stripe webhooks are verified by signature
                     "/css/**", "/js/**", "/images/**",
@@ -82,8 +85,9 @@ public class SecurityConfig {
             .formLogin(form -> form
                 .loginPage("/login")
                 .loginProcessingUrl("/login")
+                .usernameParameter("email")   // login form posts 'email' field
                 .defaultSuccessUrl("/dashboard", true)
-                .failureUrl("/login?error")
+                .failureHandler(loginFailureHandler())
                 .permitAll()
             )
 
@@ -127,7 +131,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         // In production, restrict to your actual domain
-        config.setAllowedOrigins(List.of(baseUrl, "http://localhost:8081", "http://localhost:3000"));
+        config.setAllowedOrigins(List.of(frontendUrl, "http://localhost:8081", "http://localhost:3000"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
         config.setAllowCredentials(true);
@@ -136,6 +140,18 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", config);
         return source;
+    }
+
+    // ── Login failure handler ─────────────────────────────────────────────────
+
+    @Bean
+    public AuthenticationFailureHandler loginFailureHandler() {
+        return (request, response, exception) -> {
+            // Distinguish "account not verified" from wrong credentials so the UI
+            // can show a targeted error message instead of a generic one.
+            String errorParam = (exception instanceof DisabledException) ? "unverified" : "invalid";
+            response.sendRedirect("/login?error=" + errorParam);
+        };
     }
 
     // ── OAuth2 user service (Google login) ────────────────────────────────────

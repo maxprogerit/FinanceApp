@@ -73,8 +73,8 @@ spring.security.oauth2.client.registration.google.client-id=${GOOGLE_CLIENT_ID}
 spring.security.oauth2.client.registration.google.client-secret=${GOOGLE_CLIENT_SECRET}
 spring.security.oauth2.client.registration.google.scope=email,profile
 
-# App base URL (used in email links)
-app.base-url=${APP_BASE_URL:https://myapp.com}
+# Frontend URL used in email links — set FRONTEND_URL env var
+app.frontend-url=${FRONTEND_URL:https://myapp.com}
 
 # Actuator — expose only health in prod
 management.endpoints.web.exposure.include=health,info

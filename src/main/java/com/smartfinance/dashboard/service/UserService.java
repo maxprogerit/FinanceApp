@@ -25,11 +25,22 @@ public class UserService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        User user;
+        // Accept both email addresses and plain usernames at the login field
+        if (username != null && username.contains("@")) {
+            user = userRepository.findByEmail(username)
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        } else {
+            user = userRepository.findByUsername(username)
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+        }
+        // Local accounts must verify email before they can log in.
+        // OAuth2 users (provider != null) are always enabled — the provider verified them already.
+        boolean enabled = Boolean.TRUE.equals(user.getEmailVerified()) || user.getProvider() != null;
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
+                enabled, true, true, true,
                 new ArrayList<>()
         );
     }
@@ -42,6 +53,9 @@ public class UserService implements UserDetailsService {
         }
         if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email already registered");
+        }
+        if (password == null || password.length() < 12) {
+            throw new IllegalArgumentException("Password must be at least 12 characters");
         }
         User user = new User();
         user.setUsername(username);
@@ -67,22 +81,32 @@ public class UserService implements UserDetailsService {
     // ── Email verification ────────────────────────────────────────────────────
 
     /**
-     * Looks up a user by their email verification token.
-     * Returns an empty Optional if no user holds that token.
+     * Generates a UUID email-verification token for the user, stores it with a
+     * 24-hour expiry, persists the user, and returns the raw token.
      */
-    public Optional<User> findByEmailVerificationToken(String token) {
-        return userRepository.findByEmailVerificationToken(token);
+    public String generateVerificationToken(User user) {
+        String token = UUID.randomUUID().toString();
+        user.setEmailVerificationToken(token);
+        user.setEmailVerificationTokenExpiry(LocalDateTime.now().plusHours(24));
+        userRepository.save(user);
+        return token;
     }
 
     /**
      * Marks a user's email as verified and clears the verification token.
-     * Throws RuntimeException if the token is unknown.
+     * Throws RuntimeException("EXPIRED_TOKEN") if the token has expired,
+     * or RuntimeException("INVALID_TOKEN") if the token is unknown.
      */
     public void verifyEmail(String token) {
         User user = userRepository.findByEmailVerificationToken(token)
-                .orElseThrow(() -> new RuntimeException("Invalid email verification token"));
+                .orElseThrow(() -> new RuntimeException("INVALID_TOKEN"));
+        if (user.getEmailVerificationTokenExpiry() != null
+                && user.getEmailVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("EXPIRED_TOKEN");
+        }
         user.setEmailVerified(true);
         user.setEmailVerificationToken(null);
+        user.setEmailVerificationTokenExpiry(null);
         userRepository.save(user);
     }
 
@@ -141,13 +165,24 @@ public class UserService implements UserDetailsService {
      * @return the existing or newly created User
      */
     public User findOrCreateOAuthUser(String provider, String providerId, String email, String name) {
-        // 1. Try to find an existing OAuth-linked account.
+        // 1. Try to find an existing OAuth-linked account by provider + providerId.
         Optional<User> existing = userRepository.findByProviderAndProviderId(provider, providerId);
         if (existing.isPresent()) {
             return existing.get();
         }
 
-        // 2. Derive a unique username from the provider's display name.
+        // 2. If a local account already exists with this email, link it to the OAuth provider
+        //    instead of creating a duplicate — avoids unique-email constraint violations.
+        Optional<User> byEmail = userRepository.findByEmail(email);
+        if (byEmail.isPresent()) {
+            User user = byEmail.get();
+            user.setProvider(provider);
+            user.setProviderId(providerId);
+            user.setEmailVerified(true); // provider has confirmed the email
+            return userRepository.save(user);
+        }
+
+        // 3. Derive a unique username from the provider's display name.
         String baseUsername = (name != null && !name.isBlank())
                 ? name.toLowerCase().replaceAll("[^a-z0-9]", "_")
                 : email.split("@")[0].toLowerCase().replaceAll("[^a-z0-9]", "_");
@@ -157,7 +192,7 @@ public class UserService implements UserDetailsService {
             username = baseUsername + "_" + suffix++;
         }
 
-        // 3. Create the new user record.
+        // 4. Create the new user record.
         User user = new User();
         user.setUsername(username);
         user.setEmail(email);

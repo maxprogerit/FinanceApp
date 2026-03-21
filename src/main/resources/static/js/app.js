@@ -71,6 +71,38 @@ async function fetchExchangeRates() {
     } catch (_) { /* keep STATIC_RATES fallback */ }
 }
 
+// ─── Subscription / plan state ────────────────────────────────────────────────
+let _planState = null; // { active, plan, status, username, trialEnd?, currentPeriodEnd? }
+
+async function fetchPlanState() {
+    if (_planState) return _planState;
+    try {
+        const cached = sessionStorage.getItem('_planState');
+        if (cached) { _planState = JSON.parse(cached); return _planState; }
+        const data = await apiGet('/payments/status');
+        _planState = data || { plan: 'FREE', status: '', active: false };
+        try { sessionStorage.setItem('_planState', JSON.stringify(_planState)); } catch (_) {}
+    } catch (_) {
+        _planState = { plan: 'FREE', status: '', active: false };
+    }
+    return _planState;
+}
+
+function isProUser() {
+    if (!_planState) return false;
+    return _planState.plan === 'PRO' && (_planState.status === 'active' || _planState.status === 'trialing');
+}
+
+function openUpgradeModal() {
+    const modal = document.getElementById('upgrade-modal');
+    if (modal) { modal.classList.remove('hidden'); document.body.style.overflow = 'hidden'; }
+}
+
+function closeUpgradeModal() {
+    const modal = document.getElementById('upgrade-modal');
+    if (modal) { modal.classList.add('hidden'); document.body.style.overflow = ''; }
+}
+
 // ─── Nav currency selector (auto-injected on every authenticated page) ────────
 function injectCurrencySelector() {
     // Now handled by injectSidebar — skip if sidebar is present
@@ -241,9 +273,137 @@ function injectSidebar() {
     }
 }
 
+// ─── Upgrade UI injection (floating button + comparison modal) ────────────────
+function injectUpgradeUI() {
+    // Don't inject on public pages (no sidebar = no auth)
+    if (!document.getElementById('app-sidebar')) return;
+    // Don't double-inject
+    if (document.getElementById('upgrade-modal')) return;
+
+    const features = [
+        { label: 'Transaction tracking',   free: true,  pro: true },
+        { label: 'Budgets & goals',        free: true,  pro: true },
+        { label: 'Investment tracking',    free: true,  pro: true },
+        { label: 'Basic analytics',        free: true,  pro: true },
+        { label: 'CSV import',             free: false, pro: true },
+        { label: 'Export CSV / PDF',       free: false, pro: true },
+        { label: 'AI-powered insights',    free: false, pro: true },
+        { label: 'Spending forecast',      free: false, pro: true },
+        { label: 'Auto-categorization',    free: false, pro: true },
+        { label: 'Priority support',       free: false, pro: true },
+    ];
+
+    const featureRow = (f, isPro) => {
+        const avail = isPro ? f.pro : f.free;
+        return `<div class="plan-feature${!avail ? ' locked' : ''}">
+            <span class="plan-feature-icon ${avail ? 'check' : 'cross'}">${avail ? '✓' : '✗'}</span>
+            <span>${f.label}</span>
+        </div>`;
+    };
+
+    const modal = document.createElement('div');
+    modal.id = 'upgrade-modal';
+    modal.className = 'hidden';
+    modal.addEventListener('click', e => { if (e.target === modal) closeUpgradeModal(); });
+    modal.innerHTML = `
+        <div id="upgrade-modal-box">
+            <div id="upgrade-modal-header">
+                <div>
+                    <h2>Choose your plan</h2>
+                    <p>Unlock powerful features to take control of your finances.</p>
+                </div>
+                <button id="upgrade-modal-close" onclick="closeUpgradeModal()" aria-label="Close">✕</button>
+            </div>
+            <div id="upgrade-modal-body">
+                <div class="plan-cards">
+                    <!-- Free -->
+                    <div class="plan-card">
+                        <div>
+                            <div class="plan-name">Free</div>
+                            <div class="plan-price"><strong>$0</strong>forever</div>
+                        </div>
+                        <div class="plan-features">
+                            ${features.map(f => featureRow(f, false)).join('')}
+                        </div>
+                        <div class="plan-cta">
+                            <div style="font-size:0.75rem;color:#9ca3af;text-align:center;padding:0.5rem 0;">Your current plan</div>
+                        </div>
+                    </div>
+                    <!-- Pro -->
+                    <div class="plan-card pro">
+                        <div class="plan-badge">Recommended</div>
+                        <div>
+                            <div class="plan-name">Pro</div>
+                            <div class="plan-price"><strong>$9</strong>per month</div>
+                        </div>
+                        <div class="plan-features">
+                            ${features.map(f => featureRow(f, true)).join('')}
+                        </div>
+                        <div class="plan-cta">
+                            <button id="modal-upgrade-btn" class="btn-primary" style="width:100%;justify-content:center;border-radius:9999px;"
+                                onclick="handleUpgradeClick(this)">
+                                Upgrade to Pro →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+
+    // Floating button — only for FREE users
+    if (!isProUser()) {
+        const btn = document.createElement('button');
+        btn.id = 'upgrade-float-btn';
+        btn.title = 'Upgrade to Pro';
+        btn.setAttribute('aria-label', 'Upgrade to Pro plan');
+        btn.innerHTML = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>Upgrade Plan`;
+        btn.addEventListener('click', openUpgradeModal);
+        document.body.appendChild(btn);
+    }
+}
+
+async function handleUpgradeClick(btn) {
+    if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); }
+    try {
+        const res = await apiPost('/payments/checkout', {});
+        if (res?.url) {
+            sessionStorage.removeItem('_planState');
+            window.location.href = res.url;
+        } else {
+            showError('Could not start checkout. Please try again.');
+        }
+    } catch (_) {
+        showError('Could not start checkout. Please check Stripe configuration.');
+    } finally {
+        if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); }
+    }
+}
+
+// ─── Feature gate overlay ─────────────────────────────────────────────────────
+/**
+ * Applies a lock overlay to `el` for FREE users.
+ * Call after plan state is known. No-ops for PRO users.
+ */
+function featureGate(el, message = 'Upgrade to Pro to unlock this feature') {
+    if (!el || isProUser()) return;
+    el.classList.add('feature-gated');
+    el.style.position = 'relative';
+    const overlay = document.createElement('div');
+    overlay.className = 'feature-gate-overlay';
+    overlay.innerHTML = `
+        <div class="feature-gate-content">
+            <span class="feature-gate-lock">🔒</span>
+            <p class="feature-gate-message">${message}</p>
+            <button class="feature-gate-btn" onclick="openUpgradeModal()">Upgrade to Pro</button>
+        </div>`;
+    el.appendChild(overlay);
+}
+
 // ─── Toast notifications ──────────────────────────────────────────────────────
 (function initToastContainer() {
-    if (document.getElementById('toast-container')) return;
     const el = document.createElement('div');
     el.id = 'toast-container';
     document.body.appendChild(el);
@@ -349,10 +509,18 @@ function emptyStateHTML(icon, message) {
 }
 
 // ─── Init on every page ───────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     injectSidebar();
     injectCurrencySelector(); // fallback for pages without a nav
     fetchExchangeRates();
+
+    // Clear cached plan state on successful Stripe redirect so it re-fetches
+    if (new URLSearchParams(window.location.search).get('subscription') === 'success') {
+        sessionStorage.removeItem('_planState');
+    }
+
+    await fetchPlanState();
+    injectUpgradeUI();
 });
 
 // ─── Expose on window ─────────────────────────────────────────────────────────
@@ -368,4 +536,7 @@ Object.assign(window, {
     formatCurrency, formatDate, formatDateTime, daysUntil,
     // Misc
     makeTableSortable, emptyStateHTML, API,
+    // Subscription / plan
+    fetchPlanState, isProUser, openUpgradeModal, closeUpgradeModal,
+    handleUpgradeClick, featureGate,
 });

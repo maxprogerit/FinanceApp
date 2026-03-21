@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification — Smart Finance Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 min-h-screen flex items-center justify-center">
+
+    <div class="w-full max-w-md px-4 py-8">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 text-center">
+
+            <h1 class="text-3xl font-bold text-indigo-600 dark:text-indigo-400 mb-8">💰 Smart Finance</h1>
+
+            <!-- Success state -->
+            <div th:if="${success}" class="space-y-5">
+                <div class="flex items-center justify-center w-20 h-20 rounded-full bg-green-100 dark:bg-green-900/30 mx-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10 text-green-600 dark:text-green-400">
+                        <path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Email Verified!</h2>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm">Your email has been verified successfully. You can now log in.</p>
+                </div>
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                    Redirecting in <span id="countdown" class="font-semibold text-indigo-600 dark:text-indigo-400">3</span>s…
+                </p>
+                <a href="/login"
+                   class="inline-block w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg shadow hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200">
+                    Go to Login
+                </a>
+            </div>
+
+            <!-- Expired token state -->
+            <div th:if="${errorType == 'expired'}" class="space-y-5">
+                <div class="flex items-center justify-center w-20 h-20 rounded-full bg-amber-100 dark:bg-amber-900/30 mx-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10 text-amber-600 dark:text-amber-400">
+                        <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 6a.75.75 0 00-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 000-1.5h-3.75V6z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Link Expired</h2>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm">Your verification link has expired. Please request a new one.</p>
+                </div>
+                <a href="/resend-verification"
+                   class="inline-block w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg shadow hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200">
+                    Resend Verification Email
+                </a>
+                <a href="/login" class="block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">Back to login</a>
+            </div>
+
+            <!-- Invalid / already used token state -->
+            <div th:if="${errorType == 'invalid'}" class="space-y-5">
+                <div class="flex items-center justify-center w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 mx-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10 text-red-600 dark:text-red-400">
+                        <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Link Invalid</h2>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm">This link is invalid or has already been used. Request a new verification email if needed.</p>
+                </div>
+                <a href="/resend-verification"
+                   class="inline-block w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg shadow hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200">
+                    Resend Verification Email
+                </a>
+                <a href="/login" class="block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">Back to login</a>
+            </div>
+
+            <!-- Fallback: no token and no error -->
+            <div th:if="${success == null and errorType == null}" class="space-y-4">
+                <p class="text-gray-600 dark:text-gray-400 text-sm">No verification token provided.</p>
+                <a href="/login" class="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">Back to login</a>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="/js/theme.js"></script>
+    <script th:if="${success}">
+        let count = 3;
+        const el = document.getElementById('countdown');
+        const timer = setInterval(() => {
+            count--;
+            el.textContent = count;
+            if (count <= 0) {
+                clearInterval(timer);
+                window.location.href = '/login';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
