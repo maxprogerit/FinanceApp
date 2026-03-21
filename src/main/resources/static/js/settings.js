@@ -524,7 +524,7 @@ async function loadPlanStatus() {
 
         const plan      = s.plan   || 'FREE';
         const subStatus = s.status || '';
-        const isPro     = plan === 'PRO' && (subStatus === 'active' || subStatus === 'trialing');
+        const isPro     = (plan === 'PRO' || plan === 'PREMIUM') && (subStatus === 'active' || subStatus === 'trialing');
 
         if (isPro) {
             const trialText = subStatus === 'trialing' ? 'Trial active' : 'Active subscription';
@@ -532,7 +532,7 @@ async function loadPlanStatus() {
             const trialEnd  = s.trialEnd          ? new Date(s.trialEnd).toLocaleDateString('en-US',          { month: 'short', day: 'numeric', year: 'numeric' }) : null;
 
             planEl.innerHTML = `
-                <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">PRO</span>
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">${plan}</span>
                 <span class="text-xs text-gray-500 dark:text-gray-400">${trialText}${(trialEnd && subStatus === 'trialing') ? ` · trial ends ${trialEnd}` : (periodEnd ? ` · renews ${periodEnd}` : '')}</span>`;
 
             if (upgradeEl) upgradeEl.classList.add('hidden');

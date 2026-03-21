@@ -47,6 +47,23 @@ public class User {
     @JsonIgnore
     private LocalDateTime passwordResetExpiry;
 
+    // Subscription plan (canonical source — synced from Stripe webhooks)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private PlanType plan = PlanType.FREE;
+
+    /** Whether the user currently has full premium-tier access. */
+    @Column(nullable = false)
+    private boolean premiumActive = false;
+
+    /** Stripe customer ID (cus_...) — @JsonIgnore to prevent leaking in API responses. */
+    @JsonIgnore
+    private String stripeCustomerId;
+
+    /** Active Stripe subscription ID (sub_...) — @JsonIgnore to prevent leaking. */
+    @JsonIgnore
+    private String stripeSubscriptionId;
+
     private LocalDateTime createdAt;
 
     @PrePersist

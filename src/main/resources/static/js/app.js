@@ -90,7 +90,9 @@ async function fetchPlanState() {
 
 function isProUser() {
     if (!_planState) return false;
-    return _planState.plan === 'PRO' && (_planState.status === 'active' || _planState.status === 'trialing');
+    const plan = _planState.plan;
+    if (plan === 'PREMIUM') return true;
+    return plan === 'PRO' && (_planState.status === 'active' || _planState.status === 'trialing');
 }
 
 function openUpgradeModal() {

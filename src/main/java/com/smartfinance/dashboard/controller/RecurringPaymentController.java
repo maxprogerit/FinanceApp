@@ -2,7 +2,7 @@ package com.smartfinance.dashboard.controller;
 
 import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.security.SecurityUtils;
-import com.smartfinance.dashboard.service.SubscriptionService;
+import com.smartfinance.dashboard.service.RecurringPaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -10,26 +10,30 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Exposes detected recurring expense payments (Netflix, Spotify, etc.) derived from
+ * the user's transaction history. Not related to Stripe billing subscriptions.
+ */
 @RestController
-@RequestMapping("/api/subscriptions")
+@RequestMapping("/api/recurring-payments")
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
-public class SubscriptionController {
+public class RecurringPaymentController {
 
-    private final SubscriptionService subscriptionService;
+    private final RecurringPaymentService recurringPaymentService;
     private final SecurityUtils securityUtils;
 
     @GetMapping
-    public ResponseEntity<List<SubscriptionService.SubscriptionSummary>> getAll() {
+    public ResponseEntity<List<RecurringPaymentService.RecurringPaymentSummary>> getAll() {
         User user = securityUtils.getCurrentUser();
-        return ResponseEntity.ok(subscriptionService.detectSubscriptions(user));
+        return ResponseEntity.ok(recurringPaymentService.detectRecurringPayments(user));
     }
 
     @GetMapping("/upcoming")
-    public ResponseEntity<List<SubscriptionService.SubscriptionSummary>> getUpcoming(
+    public ResponseEntity<List<RecurringPaymentService.RecurringPaymentSummary>> getUpcoming(
             @RequestParam(defaultValue = "7") int days) {
         User user = securityUtils.getCurrentUser();
-        return ResponseEntity.ok(subscriptionService.getUpcomingSubscriptions(days, user));
+        return ResponseEntity.ok(recurringPaymentService.getUpcomingPayments(days, user));
     }
 
     @ExceptionHandler(RuntimeException.class)
