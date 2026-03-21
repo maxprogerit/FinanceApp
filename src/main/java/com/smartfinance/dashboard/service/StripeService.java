@@ -39,8 +39,8 @@ public class StripeService {
     @Value("${stripe.price-id}")
     private String priceId;
 
-    @Value("${app.base-url}")
-    private String baseUrl;
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     @PostConstruct
     public void init() {
@@ -61,8 +61,8 @@ public class StripeService {
                         .setPrice(priceId)
                         .setQuantity(1L)
                         .build())
-                .setSuccessUrl(baseUrl + "/settings?subscription=success")
-                .setCancelUrl(baseUrl + "/settings?subscription=cancelled")
+                .setSuccessUrl(frontendUrl + "/settings?subscription=success")
+                .setCancelUrl(frontendUrl + "/settings?subscription=cancelled")
                 .setSubscriptionData(SessionCreateParams.SubscriptionData.builder()
                         .setTrialPeriodDays(14L) // 14-day free trial
                         .build())
@@ -80,7 +80,7 @@ public class StripeService {
         com.stripe.param.billingportal.SessionCreateParams params =
                 com.stripe.param.billingportal.SessionCreateParams.builder()
                         .setCustomer(customerId)
-                        .setReturnUrl(baseUrl + "/settings")
+                        .setReturnUrl(frontendUrl + "/settings")
                         .build();
         com.stripe.model.billingportal.Session session =
                 com.stripe.model.billingportal.Session.create(params);
@@ -95,6 +95,13 @@ public class StripeService {
         return subscriptionRepository.findByUser(user)
                 .map(UserSubscription::isActive)
                 .orElse(false);
+    }
+
+    /**
+     * Returns the UserSubscription for the given user, if one exists.
+     */
+    public Optional<UserSubscription> getSubscription(User user) {
+        return subscriptionRepository.findByUser(user);
     }
 
     /**

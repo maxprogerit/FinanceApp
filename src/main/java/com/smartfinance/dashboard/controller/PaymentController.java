@@ -14,7 +14,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.smartfinance.dashboard.model.UserSubscription;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Handles Stripe checkout sessions, billing portal, and webhook events.
@@ -71,11 +74,17 @@ public class PaymentController {
     @GetMapping("/status")
     public ResponseEntity<?> getSubscriptionStatus() {
         User user = securityUtils.getCurrentUser();
-        boolean active = stripeService.hasActiveSubscription(user);
-        return ResponseEntity.ok(Map.of(
-                "active", active,
-                "username", user.getUsername()
-        ));
+        Optional<UserSubscription> sub = stripeService.getSubscription(user);
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("username", user.getUsername());
+        resp.put("active",   sub.map(UserSubscription::isActive).orElse(false));
+        resp.put("plan",     sub.map(UserSubscription::getPlan).orElse("FREE"));
+        resp.put("status",   sub.map(UserSubscription::getStatus).orElse(""));
+        sub.ifPresent(s -> {
+            if (s.getTrialEnd() != null)         resp.put("trialEnd", s.getTrialEnd());
+            if (s.getCurrentPeriodEnd() != null) resp.put("currentPeriodEnd", s.getCurrentPeriodEnd());
+        });
+        return ResponseEntity.ok(resp);
     }
 
     /**

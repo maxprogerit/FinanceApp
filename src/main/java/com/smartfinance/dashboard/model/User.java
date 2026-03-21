@@ -38,6 +38,8 @@ public class User {
     private Boolean emailVerified = false;
     @JsonIgnore
     private String emailVerificationToken;
+    @JsonIgnore
+    private LocalDateTime emailVerificationTokenExpiry;
 
     // Password reset
     @JsonIgnore

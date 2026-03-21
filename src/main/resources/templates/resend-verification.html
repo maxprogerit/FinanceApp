@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Forgot Password — Smart Finance Dashboard</title>
+    <title>Resend Verification — Smart Finance Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -13,10 +13,10 @@
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8">
             <div class="text-center mb-8">
                 <h1 class="text-3xl font-bold text-indigo-600 dark:text-indigo-400">💰 Smart Finance</h1>
-                <p class="mt-2 text-gray-600 dark:text-gray-300">Reset your password</p>
+                <p class="mt-2 text-gray-600 dark:text-gray-300">Resend verification email</p>
             </div>
 
-            <!-- Sent state: shown after form submission -->
+            <!-- Sent state -->
             <div th:if="${sent}" class="space-y-5 text-center">
                 <div class="flex items-center justify-center w-20 h-20 rounded-full bg-indigo-100 dark:bg-indigo-900/30 mx-auto">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-10 h-10 text-indigo-600 dark:text-indigo-400">
@@ -25,39 +25,39 @@
                     </svg>
                 </div>
                 <div>
-                    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Check your inbox</h2>
-                    <p class="text-gray-600 dark:text-gray-400 text-sm">If that email address is registered, we've sent a password reset link. It expires in 1 hour.</p>
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">Verification email sent</h2>
+                    <p class="text-gray-600 dark:text-gray-400 text-sm">If that address belongs to an unverified account, a new verification link has been sent. It expires in 24 hours.</p>
                 </div>
-                <p class="text-xs text-gray-500 dark:text-gray-400">Don't see it? Check your spam folder or try again below.</p>
-                <a href="/forgot-password"
-                   class="inline-block w-full py-3 px-4 border border-indigo-300 dark:border-indigo-700 text-indigo-600 dark:text-indigo-400 font-semibold rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition text-center">
-                    Send another link
+                <p class="text-xs text-gray-500 dark:text-gray-400">Don't see it? Check your spam folder.</p>
+                <a href="/login"
+                   class="inline-block w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg shadow hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200">
+                    Back to Login
                 </a>
-                <a href="/login" class="block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">Back to login</a>
+                <a href="/resend-verification" class="block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">Send to a different address</a>
             </div>
 
             <!-- Form state -->
             <div th:unless="${sent}">
                 <p class="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                    Enter your account email and we'll send you a link to reset your password.
+                    Enter your registered email address and we'll send you a new verification link.
                 </p>
 
-                <form method="POST" th:action="@{/forgot-password}" id="forgotForm" class="space-y-5">
+                <form method="POST" th:action="@{/resend-verification}" id="resendForm" class="space-y-5">
                     <div>
                         <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email address</label>
                         <input type="email" id="email" name="email" required autofocus
                                class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
                                placeholder="you@example.com">
                     </div>
-                    <button type="submit" id="sendBtn"
+                    <button type="submit" id="resendBtn"
                             class="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold rounded-lg shadow hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200">
-                        Send Reset Link
+                        Send Verification Email
                     </button>
                 </form>
 
                 <p class="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
-                    Remembered it?
-                    <a href="/login" class="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">Back to login</a>
+                    Already verified?
+                    <a href="/login" class="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">Log in</a>
                 </p>
             </div>
         </div>
@@ -65,8 +65,8 @@
 
     <script src="/js/theme.js"></script>
     <script th:unless="${sent}">
-        document.getElementById('forgotForm').addEventListener('submit', function () {
-            const btn = document.getElementById('sendBtn');
+        document.getElementById('resendForm').addEventListener('submit', function () {
+            const btn = document.getElementById('resendBtn');
             btn.disabled = true;
             btn.textContent = 'Sending…';
         });

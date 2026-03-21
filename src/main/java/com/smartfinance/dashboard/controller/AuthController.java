@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.Map;
-import java.util.UUID;
 
 @Controller
 @RequiredArgsConstructor
@@ -33,7 +32,15 @@ public class AuthController {
                             @RequestParam(required = false) String logout,
                             Model model) {
         if (error != null) {
-            model.addAttribute("error", "Invalid username or password. Please try again.");
+            String message = switch (error) {
+                case "unverified" -> "Please verify your email before logging in. Check your inbox for the verification link.";
+                case "oauth" -> "Google sign-in failed. Please try again or use email and password.";
+                default -> "Invalid email or password. Please try again.";
+            };
+            model.addAttribute("error", message);
+            if ("unverified".equals(error)) {
+                model.addAttribute("resendVerification", true);
+            }
         }
         if (logout != null) {
             model.addAttribute("message", "You have been logged out successfully.");
@@ -53,10 +60,8 @@ public class AuthController {
                            RedirectAttributes redirectAttributes) {
         try {
             User user = userService.register(username, email, password);
-            // Generate and store verification token
-            String token = UUID.randomUUID().toString();
-            user.setEmailVerificationToken(token);
-            userService.save(user);
+            // Generate token with 24-hour expiry and send verification email
+            String token = userService.generateVerificationToken(user);
             emailService.sendVerificationEmail(email, username, token);
             redirectAttributes.addFlashAttribute("message",
                     "Account created! Please check your email to verify your address, then log in.");

@@ -1,7 +1,6 @@
 package com.smartfinance.dashboard.controller;
 
 import com.smartfinance.dashboard.model.User;
-import com.smartfinance.dashboard.security.SecurityUtils;
 import com.smartfinance.dashboard.service.EmailService;
 import com.smartfinance.dashboard.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import java.util.UUID;
+import java.util.Optional;
 
 @Controller
 @RequiredArgsConstructor
@@ -46,16 +45,46 @@ public class WebController {
     @GetMapping("/verify-email")
     public String verifyEmail(@RequestParam(required = false) String token, Model model) {
         if (token == null || token.isBlank()) {
-            model.addAttribute("error", "Invalid or missing verification token.");
-            return "login";
+            model.addAttribute("errorType", "invalid");
+            return "verify-email";
         }
         try {
             userService.verifyEmail(token);
-            model.addAttribute("message", "Email verified successfully! You can now log in.");
-        } catch (Exception e) {
-            model.addAttribute("error", "Verification link is invalid or has expired.");
+            model.addAttribute("success", true);
+        } catch (RuntimeException e) {
+            if ("EXPIRED_TOKEN".equals(e.getMessage())) {
+                model.addAttribute("errorType", "expired");
+            } else {
+                model.addAttribute("errorType", "invalid");
+            }
         }
-        return "login";
+        return "verify-email";
+    }
+
+    // ── Resend verification ────────────────────────────────────────────────────
+
+    @GetMapping("/resend-verification")
+    public String resendVerificationPage() {
+        return "resend-verification";
+    }
+
+    @PostMapping("/resend-verification")
+    public String resendVerification(@RequestParam String email, Model model) {
+        try {
+            Optional<User> optUser = userService.findByEmail(email);
+            if (optUser.isPresent()) {
+                User user = optUser.get();
+                if (!Boolean.TRUE.equals(user.getEmailVerified())) {
+                    String token = userService.generateVerificationToken(user);
+                    emailService.sendVerificationEmail(user.getEmail(), user.getUsername(), token);
+                }
+                // Don't reveal if email is already verified or not found — always show success
+            }
+        } catch (Exception e) {
+            // Silently absorb to prevent email enumeration
+        }
+        model.addAttribute("sent", true);
+        return "resend-verification";
     }
 
     // ── Password reset ────────────────────────────────────────────────────────
@@ -66,26 +95,24 @@ public class WebController {
     }
 
     @PostMapping("/forgot-password")
-    public String forgotPassword(@RequestParam String email,
-                                 RedirectAttributes redirectAttributes) {
+    public String forgotPassword(@RequestParam String email, Model model) {
         try {
             String token = userService.generatePasswordResetToken(email);
             User user = userService.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("User not found"));
             emailService.sendPasswordResetEmail(email, user.getUsername(), token);
         } catch (Exception e) {
-            // Always show success to prevent email enumeration
+            // Always show the same response to prevent email enumeration
         }
-        redirectAttributes.addFlashAttribute("message",
-                "If that email exists, a reset link has been sent.");
-        return "redirect:/login";
+        model.addAttribute("sent", true);
+        return "forgot-password";
     }
 
     @GetMapping("/reset-password")
     public String resetPasswordPage(@RequestParam(required = false) String token, Model model) {
         if (token == null || token.isBlank()) {
-            model.addAttribute("error", "Invalid reset link.");
-            return "login";
+            model.addAttribute("errorType", "invalid");
+            return "reset-password";
         }
         model.addAttribute("token", token);
         return "reset-password";
@@ -95,22 +122,23 @@ public class WebController {
     public String resetPassword(@RequestParam String token,
                                 @RequestParam String password,
                                 @RequestParam String confirmPassword,
+                                Model model,
                                 RedirectAttributes redirectAttributes) {
         if (!password.equals(confirmPassword)) {
             redirectAttributes.addFlashAttribute("error", "Passwords do not match.");
             return "redirect:/reset-password?token=" + token;
         }
-        if (password.length() < 8) {
-            redirectAttributes.addFlashAttribute("error", "Password must be at least 8 characters.");
+        if (password.length() < 12) {
+            redirectAttributes.addFlashAttribute("error", "Password must be at least 12 characters.");
             return "redirect:/reset-password?token=" + token;
         }
         boolean success = userService.resetPassword(token, password);
         if (success) {
-            redirectAttributes.addFlashAttribute("message", "Password reset successfully! Please log in.");
-            return "redirect:/login";
+            model.addAttribute("success", true);
+            return "reset-password";
         } else {
-            redirectAttributes.addFlashAttribute("error", "Reset link has expired. Please request a new one.");
-            return "redirect:/forgot-password";
+            model.addAttribute("errorType", "expired");
+            return "reset-password";
         }
     }
 }

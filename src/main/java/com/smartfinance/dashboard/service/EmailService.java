@@ -29,12 +29,12 @@ public class EmailService {
     @Value("${app.mail.enabled:false}")
     private boolean mailEnabled;
 
-    @Value("${app.base-url}")
-    private String baseUrl;
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     @Async
     public void sendVerificationEmail(String toEmail, String username, String token) {
-        String link = baseUrl + "/verify-email?token=" + token;
+        String link = frontendUrl + "/verify-email?token=" + token;
         String subject = "Verify your Smart Finance Dashboard account";
         String html = """
                 <h2>Welcome to Smart Finance Dashboard, %s!</h2>
@@ -48,7 +48,7 @@ public class EmailService {
 
     @Async
     public void sendPasswordResetEmail(String toEmail, String username, String token) {
-        String link = baseUrl + "/reset-password?token=" + token;
+        String link = frontendUrl + "/reset-password?token=" + token;
         String subject = "Reset your Smart Finance Dashboard password";
         String html = """
                 <h2>Password Reset Request</h2>

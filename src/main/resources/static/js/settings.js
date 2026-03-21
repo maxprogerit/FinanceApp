@@ -4,6 +4,17 @@
 //       apiGet, apiPost, apiPut, apiDelete are provided by app.js
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Show toast for Stripe redirect results
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('subscription') === 'success') {
+        showSuccess('You are now on the Pro plan. Welcome!');
+        // Remove query param from URL without reload
+        history.replaceState(null, '', window.location.pathname);
+    } else if (sp.get('subscription') === 'cancelled') {
+        showInfo('Checkout cancelled — your plan has not changed.');
+        history.replaceState(null, '', window.location.pathname);
+    }
+
     loadSettings();
     updateDarkModeToggle();
     buildConverterSelects();
@@ -12,8 +23,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadStorageTypes();
     loadIncomeSources();
     loadCategorizationRules();
-    loadForecast();
-    loadPlanStatus();
+    await loadPlanStatus();   // Must complete before feature gates run
+    applySettingsFeatureGates();
+    loadForecast();           // After gates — so overlay is correct
 });
 
 // ── Persistence ───────────────────────────────────────────────────────────────
@@ -446,6 +458,27 @@ function exportPDF() {
     window.location.href = `${API}/export/report/pdf?year=${year}&month=${month}`;
 }
 
+async function importCSV() {
+    const fileEl = document.getElementById('csvImportFile');
+    const currency = document.getElementById('csvImportCurrency')?.value || 'USD';
+    if (!fileEl?.files?.length) { showError('Please select a CSV file.'); return; }
+    const file = fileEl.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('currency', currency);
+    const btn = document.querySelector('button[onclick="importCSV()"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+    try {
+        const res = await fetch(`${API}/import/csv`, { method: 'POST', body: formData });
+        if (res.status === 403) { openUpgradeModal(); return; }
+        if (!res.ok) { const b = await res.json(); throw new Error(b.error || 'Import failed'); }
+        const data = await res.json();
+        showSuccess(data.message || `Imported successfully.`);
+        fileEl.value = '';
+    } catch (e) { showError(e.message || 'Import failed. Please check the file format.'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'Import'; } }
+}
+
 async function loadForecast() {
     const container = document.getElementById('forecastContainer');
     if (!container) return;
@@ -479,25 +512,62 @@ async function loadForecast() {
 
 // ── Subscription plan status ──────────────────────────────────────────────────
 async function loadPlanStatus() {
+    const planEl    = document.getElementById('planStatus');
+    const upgradeEl = document.getElementById('upgradeBtn');
+    const manageEl  = document.getElementById('manageBtn');
+    if (!planEl) return;
+
     try {
-        const status = await apiGet('/payments/status');
-        const planEl = document.getElementById('planStatus');
-        if (!planEl || !status) return;
-        const plan     = status.plan || 'FREE';
-        const subStatus = status.status || '';
-        const isPro    = plan === 'PRO' && (subStatus === 'active' || subStatus === 'trialing');
-        planEl.innerHTML = isPro
-            ? `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">PRO</span>
-               <span class="text-xs text-gray-500 dark:text-gray-400">${subStatus === 'trialing' ? 'Trial active' : 'Active subscription'}</span>`
-            : `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">FREE</span>
-               <span class="text-xs text-gray-500 dark:text-gray-400">Upgrade for CSV import and advanced features</span>`;
-    } catch (_) { /* silent — payments may not be configured */ }
+        // fetchPlanState (app.js) caches in sessionStorage; use it directly
+        const s = await fetchPlanState();
+        if (!s) return;
+
+        const plan      = s.plan   || 'FREE';
+        const subStatus = s.status || '';
+        const isPro     = plan === 'PRO' && (subStatus === 'active' || subStatus === 'trialing');
+
+        if (isPro) {
+            const trialText = subStatus === 'trialing' ? 'Trial active' : 'Active subscription';
+            const periodEnd = s.currentPeriodEnd ? new Date(s.currentPeriodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+            const trialEnd  = s.trialEnd          ? new Date(s.trialEnd).toLocaleDateString('en-US',          { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+
+            planEl.innerHTML = `
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300">PRO</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">${trialText}${(trialEnd && subStatus === 'trialing') ? ` · trial ends ${trialEnd}` : (periodEnd ? ` · renews ${periodEnd}` : '')}</span>`;
+
+            if (upgradeEl) upgradeEl.classList.add('hidden');
+            if (manageEl)  manageEl.classList.remove('hidden');
+        } else {
+            planEl.innerHTML = `
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">FREE</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Upgrade for exports, AI insights &amp; more</span>`;
+
+            if (upgradeEl) upgradeEl.classList.remove('hidden');
+            if (manageEl)  manageEl.classList.add('hidden');
+        }
+    } catch (_) { /* silent — Stripe may not be configured */ }
+}
+
+function applySettingsFeatureGates() {
+    if (typeof isProUser !== 'function' || isProUser()) return;
+    // Gate the Export & Reports card (includes CSV, PDF, and Spending Forecast)
+    featureGate(document.getElementById('exportGateTarget'), 'Export your data with a Pro subscription');
+    // Gate the CSV Import card
+    featureGate(document.getElementById('csvImportGateTarget'), 'CSV import is available on the Pro plan');
 }
 
 async function handleUpgrade(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    openUpgradeModal();
+}
+
+async function handleManage(e) {
+    if (e) e.preventDefault();
+    const btn = e?.currentTarget;
+    if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); }
     try {
-        const res = await apiPost('/payments/checkout', {});
+        const res = await apiPost('/payments/portal', {});
         if (res?.url) window.location.href = res.url;
-    } catch (_) { showError('Could not start checkout. Please check Stripe configuration.'); }
+    } catch (_) { showError('Could not open billing portal. Please try again.'); }
+    finally { if (btn) { btn.disabled = false; btn.classList.remove('btn-loading'); } }
 }
