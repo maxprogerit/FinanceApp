@@ -14,14 +14,19 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Detects recurring expense payments (e.g. Netflix, Spotify) from transaction history.
+ * This is completely separate from Stripe payment subscriptions — it analyses the user's
+ * own spending transactions to find recurring patterns.
+ */
 @Service
 @RequiredArgsConstructor
-public class SubscriptionService {
+public class RecurringPaymentService {
 
     private final TransactionRepository transactionRepository;
     private final AlertService alertService;
 
-    public static class SubscriptionSummary {
+    public static class RecurringPaymentSummary {
         public String name;
         public String category;
         public BigDecimal amount;
@@ -30,8 +35,8 @@ public class SubscriptionService {
         public LocalDateTime lastCharge;
         public LocalDateTime nextExpectedCharge;
 
-        public SubscriptionSummary(String name, String category, BigDecimal amount, String currency,
-                                   String frequency, LocalDateTime lastCharge, LocalDateTime nextExpectedCharge) {
+        public RecurringPaymentSummary(String name, String category, BigDecimal amount, String currency,
+                                       String frequency, LocalDateTime lastCharge, LocalDateTime nextExpectedCharge) {
             this.name = name;
             this.category = category;
             this.amount = amount;
@@ -42,9 +47,9 @@ public class SubscriptionService {
         }
     }
 
-    public List<SubscriptionSummary> detectSubscriptions(User user) {
+    public List<RecurringPaymentSummary> detectRecurringPayments(User user) {
         List<Transaction> all = transactionRepository.findByUser(user);
-        List<SubscriptionSummary> results = new ArrayList<>();
+        List<RecurringPaymentSummary> results = new ArrayList<>();
         Set<String> seen = new HashSet<>();
 
         // Group by normalized description
@@ -85,7 +90,7 @@ public class SubscriptionService {
             String currency = last.getCurrency();
             LocalDateTime nextCharge = computeNextCharge(last.getTransactionDate(), avgInterval, frequency);
 
-            results.add(new SubscriptionSummary(name, category, avgAmount, currency, frequency,
+            results.add(new RecurringPaymentSummary(name, category, avgAmount, currency, frequency,
                     last.getTransactionDate(), nextCharge));
         }
 
@@ -93,31 +98,31 @@ public class SubscriptionService {
         return results;
     }
 
-    public List<SubscriptionSummary> getUpcomingSubscriptions(int days, User user) {
+    public List<RecurringPaymentSummary> getUpcomingPayments(int days, User user) {
         LocalDateTime cutoff = LocalDateTime.now().plusDays(days);
-        return detectSubscriptions(user).stream()
+        return detectRecurringPayments(user).stream()
                 .filter(s -> s.nextExpectedCharge != null && !s.nextExpectedCharge.isAfter(cutoff))
                 .collect(Collectors.toList());
     }
 
     public void createUpcomingAlerts(User user) {
-        List<SubscriptionSummary> upcoming = getUpcomingSubscriptions(7, user);
+        List<RecurringPaymentSummary> upcoming = getUpcomingPayments(7, user);
         List<Alert> existing = alertService.getAllAlerts();
 
-        for (SubscriptionSummary sub : upcoming) {
-            String title = "Subscription due: " + sub.name;
+        for (RecurringPaymentSummary payment : upcoming) {
+            String title = "Recurring payment due: " + payment.name;
             boolean alreadyAlerted = existing.stream()
                     .anyMatch(a -> title.equals(a.getTitle())
                             && a.getCreatedAt().isAfter(LocalDateTime.now().minusDays(7)));
             if (alreadyAlerted) continue;
 
             Alert alert = new Alert();
-            alert.setType("SUBSCRIPTION_ALERT");
+            alert.setType("RECURRING_PAYMENT_ALERT");
             alert.setSeverity("WARNING");
             alert.setTitle(title);
-            alert.setMessage(sub.name + " — " + sub.amount + " " + sub.currency
-                    + " expected on " + sub.nextExpectedCharge.toLocalDate());
-            alert.setRelatedEntityType("SUBSCRIPTION");
+            alert.setMessage(payment.name + " — " + payment.amount + " " + payment.currency
+                    + " expected on " + payment.nextExpectedCharge.toLocalDate());
+            alert.setRelatedEntityType("RECURRING_PAYMENT");
             alertService.createAlert(alert);
         }
     }

@@ -489,8 +489,8 @@ async function submitContribution() {
 async function loadSubscriptions() {
     try {
         const [all, upcoming] = await Promise.all([
-            apiGet('/subscriptions'),
-            apiGet('/subscriptions/upcoming?days=7'),
+            apiGet('/recurring-payments'),
+            apiGet('/recurring-payments/upcoming?days=7'),
         ]);
         let monthly = 0;
         all.forEach(sub => {

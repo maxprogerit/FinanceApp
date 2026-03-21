@@ -3,7 +3,7 @@ package com.smartfinance.dashboard.controller;
 import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.security.SecurityUtils;
 import com.smartfinance.dashboard.service.CsvImportService;
-import com.smartfinance.dashboard.service.StripeService;
+import com.smartfinance.dashboard.service.PlanAccessService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -14,7 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.Map;
 
 /**
- * CSV import — premium feature requiring an active subscription.
+ * CSV import — premium feature requiring an active Pro or Premium subscription.
  */
 @RestController
 @RequestMapping("/api/import")
@@ -22,7 +22,7 @@ import java.util.Map;
 public class CsvImportController {
 
     private final CsvImportService csvImportService;
-    private final StripeService stripeService;
+    private final PlanAccessService planAccessService;
     private final SecurityUtils securityUtils;
 
     @PostMapping(value = "/csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -32,10 +32,9 @@ public class CsvImportController {
 
         User user = securityUtils.getCurrentUser();
 
-        // Paywall: CSV import is a premium feature
-        if (!stripeService.hasActiveSubscription(user)) {
+        if (!planAccessService.hasAccess(user, "csv_import")) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "CSV import requires an active subscription.",
+                    .body(Map.of("error", "CSV import requires an active Pro or Premium subscription.",
                                  "upgradeUrl", "/settings"));
         }
 

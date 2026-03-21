@@ -76,10 +76,12 @@ public class PaymentController {
         User user = securityUtils.getCurrentUser();
         Optional<UserSubscription> sub = stripeService.getSubscription(user);
         Map<String, Object> resp = new HashMap<>();
-        resp.put("username", user.getUsername());
-        resp.put("active",   sub.map(UserSubscription::isActive).orElse(false));
-        resp.put("plan",     sub.map(UserSubscription::getPlan).orElse("FREE"));
-        resp.put("status",   sub.map(UserSubscription::getStatus).orElse(""));
+        resp.put("username",      user.getUsername());
+        resp.put("active",        sub.map(UserSubscription::isActive).orElse(false));
+        resp.put("plan",          sub.map(UserSubscription::getPlan).orElse(
+                user.getPlan() != null ? user.getPlan().name() : "FREE"));
+        resp.put("status",        sub.map(UserSubscription::getStatus).orElse(""));
+        resp.put("premiumActive", user.isPremiumActive());
         sub.ifPresent(s -> {
             if (s.getTrialEnd() != null)         resp.put("trialEnd", s.getTrialEnd());
             if (s.getCurrentPeriodEnd() != null) resp.put("currentPeriodEnd", s.getCurrentPeriodEnd());
