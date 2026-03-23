@@ -66,6 +66,11 @@ public class User {
 
     private LocalDateTime createdAt;
 
+    // Editable profile fields
+    @Column(length = 500)
+    private String bio;
+    private String avatarUrl;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

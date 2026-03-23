@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile — Smart Finance</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+
+<nav><!-- placeholder — app.js injects sidebar --></nav>
+
+<main class="p-6 space-y-6 max-w-3xl mx-auto">
+
+    <!-- Profile Header -->
+    <div class="card flex items-center gap-6">
+        <div class="relative flex-shrink-0">
+            <img id="profileAvatar"
+                 src="https://api.dicebear.com/7.x/initials/svg?seed=U&backgroundColor=6366f1"
+                 alt="Avatar"
+                 class="w-20 h-20 rounded-full object-cover ring-4 ring-indigo-200 dark:ring-indigo-800">
+        </div>
+        <div class="flex-1 min-w-0">
+            <h1 id="profileUsername" class="text-2xl font-bold text-gray-900 dark:text-white truncate">—</h1>
+            <p id="profileEmail" class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">—</p>
+            <div class="flex items-center gap-2 mt-2">
+                <span id="profilePlanBadge"
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                    FREE
+                </span>
+                <span id="profileMemberSince" class="text-xs text-gray-400 dark:text-gray-500"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Info -->
+    <div class="card space-y-4">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">Account Information</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Username</p>
+                <p id="infoUsername" class="text-sm font-medium text-gray-900 dark:text-white">—</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Email</p>
+                <p id="infoEmail" class="text-sm font-medium text-gray-900 dark:text-white">—</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Base Currency</p>
+                <p id="infoCurrency" class="text-sm font-medium text-gray-900 dark:text-white">—</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Theme</p>
+                <p id="infoTheme" class="text-sm font-medium text-gray-900 dark:text-white capitalize">—</p>
+            </div>
+        </div>
+        <p class="text-xs text-gray-400 dark:text-gray-500">
+            To change currency or theme, visit
+            <a href="/settings" class="text-indigo-600 dark:text-indigo-400 hover:underline">Settings</a>.
+        </p>
+    </div>
+
+    <!-- Subscription Info -->
+    <div class="card space-y-3">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">Subscription</h2>
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm font-medium text-gray-900 dark:text-white" id="subPlanLabel">—</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5" id="subStatus">—</p>
+            </div>
+            <div id="subActionArea"></div>
+        </div>
+    </div>
+
+    <!-- Editable Bio -->
+    <div class="card space-y-4">
+        <h2 class="text-base font-semibold text-gray-900 dark:text-white">About Me</h2>
+        <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">Bio</label>
+            <textarea id="bioInput" rows="4"
+                placeholder="Write a short bio about yourself…"
+                class="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800
+                       text-gray-900 dark:text-white text-sm px-3 py-2
+                       focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+            <p class="text-xs text-gray-400 mt-1"><span id="bioCount">0</span>/500 characters</p>
+        </div>
+        <div>
+            <label class="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">Avatar URL</label>
+            <div class="flex gap-2">
+                <input id="avatarInput" type="url"
+                    placeholder="https://example.com/avatar.jpg"
+                    class="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800
+                           text-gray-900 dark:text-white text-sm px-3 py-2
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button id="previewAvatarBtn" onclick="previewAvatar()"
+                    class="px-3 py-2 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300
+                           rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                    Preview
+                </button>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Leave blank to use a generated avatar.</p>
+        </div>
+        <div class="flex justify-end">
+            <button id="saveProfileBtn" onclick="saveProfile()"
+                class="btn-primary">
+                Save Changes
+            </button>
+        </div>
+    </div>
+
+</main>
+
+<script src="/js/theme.js"></script>
+<script src="/js/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const p = await apiGet('/profile');
+        renderProfile(p);
+    } catch (e) {
+        showError('Failed to load profile');
+    }
+});
+
+function renderProfile(p) {
+    // Header
+    const avatarSrc = p.avatarUrl
+        ? p.avatarUrl
+        : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(p.username)}&backgroundColor=6366f1`;
+    document.getElementById('profileAvatar').src = avatarSrc;
+    document.getElementById('profileUsername').textContent = p.username;
+    document.getElementById('profileEmail').textContent   = p.email;
+
+    // Plan badge
+    const badge = document.getElementById('profilePlanBadge');
+    const planColors = {
+        FREE:    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+        PRO:     'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
+        PREMIUM: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+    };
+    badge.textContent = p.plan;
+    badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${planColors[p.plan] || planColors.FREE}`;
+
+    if (p.createdAt) {
+        document.getElementById('profileMemberSince').textContent =
+            'Member since ' + new Date(p.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    }
+
+    // Account info
+    document.getElementById('infoUsername').textContent = p.username;
+    document.getElementById('infoEmail').textContent    = p.email;
+    document.getElementById('infoCurrency').textContent = p.baseCurrency || 'USD';
+    document.getElementById('infoTheme').textContent    = p.theme || 'light';
+
+    // Subscription
+    document.getElementById('subPlanLabel').textContent = p.plan + ' Plan';
+    document.getElementById('subStatus').textContent =
+        p.premiumActive ? 'Active — all premium features unlocked'
+                        : p.plan === 'FREE' ? 'Free tier — upgrade to unlock more features'
+                                            : 'Subscription inactive';
+
+    const actionArea = document.getElementById('subActionArea');
+    if (!p.premiumActive && p.plan === 'FREE') {
+        actionArea.innerHTML = `<button class="btn-primary" onclick="openUpgradeModal()">Upgrade</button>`;
+    } else {
+        actionArea.innerHTML = `<a href="/settings" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Manage →</a>`;
+    }
+
+    // Bio / avatar inputs
+    const bioInput = document.getElementById('bioInput');
+    bioInput.value = p.bio || '';
+    updateBioCount();
+    document.getElementById('avatarInput').value = p.avatarUrl || '';
+}
+
+function updateBioCount() {
+    document.getElementById('bioCount').textContent =
+        document.getElementById('bioInput').value.length;
+}
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('bioInput').addEventListener('input', updateBioCount);
+});
+
+function previewAvatar() {
+    const url = document.getElementById('avatarInput').value.trim();
+    if (url) document.getElementById('profileAvatar').src = url;
+}
+
+async function saveProfile() {
+    const btn = document.getElementById('saveProfileBtn');
+    setLoading(btn, true);
+    try {
+        const body = {
+            bio:       document.getElementById('bioInput').value,
+            avatarUrl: document.getElementById('avatarInput').value.trim(),
+        };
+        const updated = await apiPut('/profile', body);
+        renderProfile(updated);
+        showSuccess('Profile saved!');
+    } catch (e) {
+        showError(e.message || 'Failed to save profile');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+</script>
+</body>
+</html>

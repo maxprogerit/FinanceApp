@@ -74,6 +74,7 @@ public class SecurityConfig {
                     "/actuator/health",
                     "/h2-console/**"
                 ).permitAll()
+                .requestMatchers("/admin", "/admin/**", "/api/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
 

@@ -91,24 +91,47 @@ public class PaymentController {
 
     /**
      * Stripe webhook endpoint — receives subscription lifecycle events.
-     * Must be excluded from CSRF protection and authentication.
+     *
+     * Security notes:
+     *   - Excluded from CSRF protection (see SecurityConfig — /api/** ignoringRequestMatchers)
+     *   - Excluded from authentication (permitAll in SecurityConfig)
+     *   - Validated via Stripe-Signature HMAC — only Stripe can produce valid signatures
+     *   - Never call getCurrentUser() inside this method — there is no authenticated session
      */
     @PostMapping("/webhook")
     public ResponseEntity<String> handleWebhook(
             @RequestBody String payload,
             @RequestHeader("Stripe-Signature") String sigHeader) {
+
+        log.info("[Stripe] Webhook POST received — verifying signature");
+
         Event event;
         try {
             event = Webhook.constructEvent(payload, sigHeader, webhookSecret);
         } catch (SignatureVerificationException e) {
-            log.warn("Invalid Stripe webhook signature: {}", e.getMessage());
+            // Most common cause in dev: using the Dashboard secret instead of
+            // the Stripe-CLI secret.  Run: stripe listen --forward-to ...
+            // and copy the whsec_... printed by the CLI into stripe.webhook-secret.
+            log.warn("[Stripe] Signature verification FAILED — is stripe.webhook-secret " +
+                     "set to the Stripe-CLI secret (not the Dashboard secret)? Error: {}",
+                     e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Invalid signature");
         } catch (Exception e) {
-            log.error("Webhook parse error: {}", e.getMessage());
+            log.error("[Stripe] Webhook payload parse error: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Parse error");
         }
 
-        stripeService.handleWebhookEvent(event);
+        log.info("[Stripe] Signature verified — processing event type={} id={}",
+                event.getType(), event.getId());
+        try {
+            stripeService.handleWebhookEvent(event);
+        } catch (Exception e) {
+            // Log the error so it's visible but return 200 to prevent Stripe from
+            // retrying a permanently-broken event (e.g., unknown customer ID).
+            // Change to 5xx only if you want Stripe to retry on transient failures.
+            log.error("[Stripe] Webhook processing error for event type={} id={}",
+                    event.getType(), event.getId(), e);
+        }
         return ResponseEntity.ok("Received");
     }
 }

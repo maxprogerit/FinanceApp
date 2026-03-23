@@ -40,6 +40,12 @@ public class WebController {
     @GetMapping("/settings")
     public String settings() { return "settings"; }
 
+    @GetMapping("/profile")
+    public String profile() { return "profile"; }
+
+    @GetMapping("/admin")
+    public String admin() { return "admin"; }
+
     // ── Email verification ────────────────────────────────────────────────────
 
     @GetMapping("/verify-email")

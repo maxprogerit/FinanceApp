@@ -10,7 +10,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,11 +39,12 @@ public class UserService implements UserDetailsService {
         // Local accounts must verify email before they can log in.
         // OAuth2 users (provider != null) are always enabled — the provider verified them already.
         boolean enabled = Boolean.TRUE.equals(user.getEmailVerified()) || user.getProvider() != null;
+        String roleWithPrefix = "ROLE_" + (user.getRole() != null ? user.getRole() : "USER");
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
                 enabled, true, true, true,
-                new ArrayList<>()
+                List.of(new SimpleGrantedAuthority(roleWithPrefix))
         );
     }
 
