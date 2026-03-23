@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel — Smart Finance</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' }</script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+
+<nav><!-- placeholder — app.js injects sidebar --></nav>
+
+<main class="p-6 space-y-6">
+
+    <!-- Header row -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900 dark:text-white">Admin Panel</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Manage users and platform settings</p>
+        </div>
+        <div id="statsBadges" class="flex gap-3"></div>
+    </div>
+
+    <!-- Stats row -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="card text-center">
+            <p class="text-2xl font-bold text-gray-900 dark:text-white" id="statTotal">—</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Total Users</p>
+        </div>
+        <div class="card text-center">
+            <p class="text-2xl font-bold text-indigo-600 dark:text-indigo-400" id="statPro">—</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">PRO / PREMIUM</p>
+        </div>
+        <div class="card text-center">
+            <p class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" id="statVerified">—</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Verified</p>
+        </div>
+        <div class="card text-center">
+            <p class="text-2xl font-bold text-amber-600 dark:text-amber-400" id="statOAuth">—</p>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">OAuth2 accounts</p>
+        </div>
+    </div>
+
+    <!-- Users table -->
+    <div class="card space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">All Users</h2>
+            <div class="flex gap-2">
+                <input id="searchInput" type="text" placeholder="Search email or username…"
+                    class="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5
+                           bg-white dark:bg-gray-800 text-gray-900 dark:text-white
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500 w-56"
+                    oninput="filterUsers()">
+                <select id="planFilter" onchange="filterUsers()"
+                    class="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1.5
+                           bg-white dark:bg-gray-800 text-gray-900 dark:text-white
+                           focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">All plans</option>
+                    <option value="FREE">FREE</option>
+                    <option value="PRO">PRO</option>
+                    <option value="PREMIUM">PREMIUM</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left">
+                <thead>
+                    <tr class="border-b border-gray-200 dark:border-gray-700">
+                        <th class="pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">User</th>
+                        <th class="pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Plan</th>
+                        <th class="pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden sm:table-cell">Provider</th>
+                        <th class="pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide hidden md:table-cell">Joined</th>
+                        <th class="pb-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <tr>
+                        <td colspan="5" class="py-10 text-center text-gray-400 dark:text-gray-500">Loading…</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p id="userCount" class="text-xs text-gray-400 dark:text-gray-500"></p>
+    </div>
+
+</main>
+
+<!-- User detail modal -->
+<div id="userDetailModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md mx-4 shadow-2xl">
+        <div class="modal-header">
+            <h3 class="modal-title">User Details</h3>
+            <button class="modal-close" onclick="closeUserModal()">✕</button>
+        </div>
+        <div class="modal-body space-y-3" id="userDetailBody"></div>
+    </div>
+</div>
+
+<!-- Confirm delete modal -->
+<div id="confirmDeleteModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm mx-4 shadow-2xl p-6 space-y-4">
+        <h3 class="text-base font-semibold text-gray-900 dark:text-white">Delete User?</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400" id="confirmDeleteText"></p>
+        <div class="flex gap-3 justify-end">
+            <button onclick="closeDeleteModal()" class="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+            <button id="confirmDeleteBtn" onclick="confirmDelete()" class="px-4 py-2 text-sm rounded-lg bg-red-600 text-white hover:bg-red-700">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/theme.js"></script>
+<script src="/js/app.js"></script>
+<script>
+let allUsers = [];
+let pendingDeleteId = null;
+
+document.addEventListener('DOMContentLoaded', loadUsers);
+
+async function loadUsers() {
+    try {
+        allUsers = await apiGet('/admin/users');
+        renderStats(allUsers);
+        renderTable(allUsers);
+    } catch (e) {
+        showError('Failed to load users. Make sure you are an admin.');
+        document.getElementById('usersTableBody').innerHTML =
+            `<tr><td colspan="5" class="py-10 text-center text-red-500">Access denied or error loading users.</td></tr>`;
+    }
+}
+
+function renderStats(users) {
+    document.getElementById('statTotal').textContent = users.length;
+    document.getElementById('statPro').textContent   = users.filter(u => u.plan !== 'FREE').length;
+    document.getElementById('statVerified').textContent = users.filter(u => u.emailVerified).length;
+    document.getElementById('statOAuth').textContent = users.filter(u => u.provider !== 'local').length;
+}
+
+function filterUsers() {
+    const q   = document.getElementById('searchInput').value.toLowerCase();
+    const plan = document.getElementById('planFilter').value;
+    const filtered = allUsers.filter(u => {
+        const matchQ    = !q || u.email.toLowerCase().includes(q) || u.username.toLowerCase().includes(q);
+        const matchPlan = !plan || u.plan === plan;
+        return matchQ && matchPlan;
+    });
+    renderTable(filtered);
+}
+
+function renderTable(users) {
+    const tbody = document.getElementById('usersTableBody');
+    document.getElementById('userCount').textContent = `Showing ${users.length} user${users.length !== 1 ? 's' : ''}`;
+
+    if (!users.length) {
+        tbody.innerHTML = `<tr><td colspan="5" class="py-10 text-center text-gray-400 dark:text-gray-500">No users found.</td></tr>`;
+        return;
+    }
+
+    const planColor = { FREE: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+                        PRO:     'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
+                        PREMIUM: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' };
+
+    tbody.innerHTML = users.map(u => `
+        <tr class="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+            <td class="py-3 pr-4">
+                <div class="flex items-center gap-3">
+                    <img src="https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u.username)}&backgroundColor=6366f1"
+                         class="w-8 h-8 rounded-full flex-shrink-0" alt="">
+                    <div class="min-w-0">
+                        <p class="font-medium text-gray-900 dark:text-white text-sm truncate">${escHtml(u.username)}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate">${escHtml(u.email)}</p>
+                    </div>
+                </div>
+            </td>
+            <td class="py-3 pr-4">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${planColor[u.plan] || planColor.FREE}">
+                    ${u.plan}${u.premiumActive ? ' ✓' : ''}
+                </span>
+                ${u.role === 'ADMIN' ? '<span class="ml-1 text-xs text-red-500 font-bold">ADMIN</span>' : ''}
+            </td>
+            <td class="py-3 pr-4 hidden sm:table-cell">
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                    ${u.provider !== 'local' ? '🔗 ' + u.provider : '🔒 local'}
+                    ${u.emailVerified ? '<span class="text-emerald-500 ml-1">✓</span>' : '<span class="text-amber-500 ml-1">!</span>'}
+                </span>
+            </td>
+            <td class="py-3 pr-4 hidden md:table-cell">
+                <span class="text-xs text-gray-500 dark:text-gray-400">${u.createdAt ? formatDate(u.createdAt) : '—'}</span>
+            </td>
+            <td class="py-3 text-right">
+                <div class="flex items-center justify-end gap-2">
+                    <button onclick="viewUser(${u.id})"
+                        class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium">View</button>
+                    <button onclick="openDeleteModal(${u.id}, '${escAttr(u.email)}')"
+                        class="text-xs text-red-500 hover:underline font-medium">Delete</button>
+                </div>
+            </td>
+        </tr>`).join('');
+}
+
+async function viewUser(id) {
+    try {
+        const u = await apiGet(`/admin/user/${id}`);
+        const body = document.getElementById('userDetailBody');
+        body.innerHTML = `
+            <div class="flex items-center gap-4">
+                <img src="https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u.username)}&backgroundColor=6366f1"
+                     class="w-14 h-14 rounded-full" alt="">
+                <div>
+                    <p class="font-semibold text-gray-900 dark:text-white">${escHtml(u.username)}</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">${escHtml(u.email)}</p>
+                </div>
+            </div>
+            ${row('ID',       u.id)}
+            ${row('Role',     u.role)}
+            ${row('Plan',     u.plan + (u.premiumActive ? ' (active)' : ''))}
+            ${row('Provider', u.provider)}
+            ${row('Verified', u.emailVerified ? '✅ Yes' : '⚠️ No')}
+            ${row('Joined',   u.createdAt ? formatDate(u.createdAt) : '—')}`;
+        document.getElementById('userDetailModal').classList.remove('hidden');
+    } catch (e) {
+        showError('Could not load user details');
+    }
+}
+
+function row(label, value) {
+    return `<div class="flex justify-between text-sm">
+        <span class="text-gray-500 dark:text-gray-400">${label}</span>
+        <span class="font-medium text-gray-900 dark:text-white">${value ?? '—'}</span>
+    </div>`;
+}
+
+function closeUserModal() {
+    document.getElementById('userDetailModal').classList.add('hidden');
+}
+
+function openDeleteModal(id, email) {
+    pendingDeleteId = id;
+    document.getElementById('confirmDeleteText').textContent =
+        `Are you sure you want to permanently delete the account "${email}"? This cannot be undone.`;
+    document.getElementById('confirmDeleteModal').classList.remove('hidden');
+}
+
+function closeDeleteModal() {
+    pendingDeleteId = null;
+    document.getElementById('confirmDeleteModal').classList.add('hidden');
+}
+
+async function confirmDelete() {
+    if (!pendingDeleteId) return;
+    const btn = document.getElementById('confirmDeleteBtn');
+    setLoading(btn, true);
+    try {
+        await apiDelete(`/admin/user/${pendingDeleteId}`);
+        allUsers = allUsers.filter(u => u.id !== pendingDeleteId);
+        renderStats(allUsers);
+        filterUsers();
+        showSuccess('User deleted.');
+        closeDeleteModal();
+    } catch (e) {
+        showError(e.message || 'Failed to delete user');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+function escHtml(str) {
+    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(str) {
+    return String(str ?? '').replace(/'/g, "\\'");
+}
+</script>
+</body>
+</html>

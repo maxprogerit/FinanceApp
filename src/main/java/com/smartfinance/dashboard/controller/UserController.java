@@ -34,6 +34,7 @@ public class UserController {
         resp.put("premiumActive", user.isPremiumActive());
         resp.put("baseCurrency", user.getBaseCurrency());
         resp.put("theme",        user.getTheme());
+        resp.put("role",         user.getRole() != null ? user.getRole() : "USER");
         return ResponseEntity.ok(resp);
     }
 }

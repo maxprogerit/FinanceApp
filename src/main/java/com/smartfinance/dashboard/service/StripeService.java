@@ -9,9 +9,11 @@ import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.Customer;
 import com.stripe.model.Event;
+import com.stripe.model.EventDataObjectDeserializer;
 import com.stripe.model.Invoice;
 import com.stripe.model.Subscription;
 import com.stripe.model.SubscriptionItem;
+import com.stripe.model.StripeObject;
 import com.stripe.model.checkout.Session;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
@@ -69,6 +71,7 @@ public class StripeService {
         SessionCreateParams params = SessionCreateParams.builder()
                 .setMode(SessionCreateParams.Mode.SUBSCRIPTION)
                 .setCustomer(customerId)
+                .putMetadata("userId", user.getId().toString()) 
                 .addLineItem(SessionCreateParams.LineItem.builder()
                         .setPrice(priceId)
                         .setQuantity(1L)
@@ -123,90 +126,272 @@ public class StripeService {
 
     /**
      * Processes Stripe webhook events.
+     *
+     * Handled events:
+     *   checkout.session.completed     — links subscription ID after checkout
+     *   customer.subscription.created  — sets plan + status on first subscription
+     *   customer.subscription.updated  — syncs plan changes (upgrade / downgrade)
+     *   customer.subscription.deleted  — resets user back to FREE
+     *   invoice.paid                   — confirms payment, flips trialing → active
+     *   invoice.payment_failed         — marks subscription as past_due
      */
     @Transactional
     public void handleWebhookEvent(Event event) {
-        log.info("Stripe webhook received: {}", event.getType());
+        log.info("[Stripe] >>> event received: type={} id={} apiVersion={}",
+                event.getType(), event.getId(), event.getApiVersion());
+
         switch (event.getType()) {
+            case "checkout.session.completed"   -> handleCheckoutCompleted(event);
             case "customer.subscription.created",
                  "customer.subscription.updated" -> handleSubscriptionUpdate(event);
             case "customer.subscription.deleted" -> handleSubscriptionDeleted(event);
-            case "invoice.payment_failed" -> handlePaymentFailed(event);
-            default -> log.debug("Unhandled webhook event type: {}", event.getType());
+            case "invoice.paid"                 -> handleInvoicePaid(event);
+            case "invoice.payment_failed"       -> handlePaymentFailed(event);
+            default -> log.debug("[Stripe] Unhandled event type: {}", event.getType());
         }
     }
 
-    private void handleSubscriptionUpdate(Event event) {
-        Subscription sub = (Subscription) event.getDataObjectDeserializer()
-                .getObject().orElse(null);
-        if (sub == null) return;
+    // ── checkout.session.completed ────────────────────────────────────────────
 
-        // Determine plan from Stripe price ID
-        String stripePriceId = extractPriceId(sub);
-        PlanType plan = mapPriceToPlan(stripePriceId);
-        boolean isActive = "active".equals(sub.getStatus()) || "trialing".equals(sub.getStatus());
+    /**
+     * Fired when the user completes the Stripe Checkout form.
+     * Links the Stripe subscription ID to our UserSubscription row so that
+     * the subscription.created event can be matched immediately afterwards.
+     */
+    private void handleCheckoutCompleted(Event event) {
+        Session session = deserializeEvent(event, Session.class);
+        if (session == null) return;
 
-        subscriptionRepository.findByStripeCustomerId(sub.getCustomer())
-                .ifPresent(userSub -> {
-                    userSub.setStripeSubscriptionId(sub.getId());
-                    userSub.setStatus(sub.getStatus());
-                    userSub.setPlan(plan.name());
-                    if (sub.getCurrentPeriodEnd() != null) {
-                        userSub.setCurrentPeriodEnd(toLocalDateTime(sub.getCurrentPeriodEnd()));
-                    }
-                    if (sub.getTrialEnd() != null) {
-                        userSub.setTrialEnd(toLocalDateTime(sub.getTrialEnd()));
-                    }
-                    subscriptionRepository.save(userSub);
+        String customerId    = session.getCustomer();
+        String subscriptionId = session.getSubscription();
+        log.info("[Stripe] checkout.session.completed: customer={} subscription={}",
+                customerId, subscriptionId);
 
-                    // Sync plan to User entity (canonical source for feature gating)
-                    User u = userSub.getUser();
-                    u.setPlan(plan);
-                    u.setStripeSubscriptionId(sub.getId());
-                    u.setPremiumActive(plan == PlanType.PREMIUM && isActive);
-                    userRepository.save(u);
+        if (customerId == null) {
+            log.warn("[Stripe] checkout.session.completed: missing customer ID — skipping");
+            return;
+        }
 
-                    if ("active".equals(sub.getStatus())) {
-                        emailService.sendSubscriptionConfirmation(
-                                u.getEmail(), u.getUsername(), plan.name(),
-                                userSub.getCurrentPeriodEnd() != null
-                                        ? userSub.getCurrentPeriodEnd().toLocalDate().toString()
-                                        : "N/A");
-                    }
-                });
+        // Link the subscriptionId on the UserSubscription record (created by getOrCreateCustomerId)
+        UserSubscription userSub = findOrCreateSubscriptionRecord(customerId);
+        if (userSub == null) {
+            log.warn("[Stripe] checkout.session.completed: no user found for customer={}", customerId);
+            return;
+        }
+        if (subscriptionId != null) {
+            userSub.setStripeSubscriptionId(subscriptionId);
+            subscriptionRepository.save(userSub);
+            // Mirror on User entity
+            User u = userSub.getUser();
+            u.setStripeSubscriptionId(subscriptionId);
+            userRepository.save(u);
+        }
+        log.info("[Stripe] checkout linked: user={} customer={}", userSub.getUser().getEmail(), customerId);
     }
 
-    private void handleSubscriptionDeleted(Event event) {
-        Subscription sub = (Subscription) event.getDataObjectDeserializer()
-                .getObject().orElse(null);
+    // ── customer.subscription.created / updated ───────────────────────────────
+
+    /**
+     * Syncs plan and status from a Stripe Subscription object to both
+     * UserSubscription and the User entity.
+     * Uses an upsert so that the row is created if it does not yet exist.
+     */
+    private void handleSubscriptionUpdate(Event event) {
+        Subscription sub = deserializeEvent(event, Subscription.class);
         if (sub == null) return;
 
-        subscriptionRepository.findByStripeCustomerId(sub.getCustomer())
-                .ifPresent(userSub -> {
+        String customerId = sub.getCustomer();
+        String status     = sub.getStatus();
+        log.info("[Stripe] {}: customer={} subscriptionId={} status={}",
+                event.getType(), customerId, sub.getId(), status);
+
+        String    stripePriceId = extractPriceId(sub);
+        PlanType  plan          = mapPriceToPlan(stripePriceId);
+        boolean   isActive      = "active".equals(status) || "trialing".equals(status);
+
+        // Upsert: find existing row or create a new one
+        UserSubscription userSub = findOrCreateSubscriptionRecord(customerId);
+        if (userSub == null) {
+            log.warn("[Stripe] handleSubscriptionUpdate: no user found for customer={}", customerId);
+            return;
+        }
+
+        userSub.setStripeSubscriptionId(sub.getId());
+        userSub.setStatus(status);
+        userSub.setPlan(plan.name());
+        if (sub.getCurrentPeriodEnd() != null) {
+            userSub.setCurrentPeriodEnd(toLocalDateTime(sub.getCurrentPeriodEnd()));
+        }
+        if (sub.getTrialEnd() != null) {
+            userSub.setTrialEnd(toLocalDateTime(sub.getTrialEnd()));
+        }
+        subscriptionRepository.save(userSub);
+
+        // Canonical plan on User entity
+        User u = userSub.getUser();
+        u.setPlan(plan);
+        u.setStripeSubscriptionId(sub.getId());
+        u.setPremiumActive(plan == PlanType.PREMIUM && isActive);
+        userRepository.save(u);
+
+        log.info("[Stripe] subscription updated: user={} plan={} status={}", u.getEmail(), plan, status);
+
+        if ("active".equals(status)) {
+            emailService.sendSubscriptionConfirmation(
+                    u.getEmail(), u.getUsername(), plan.name(),
+                    userSub.getCurrentPeriodEnd() != null
+                            ? userSub.getCurrentPeriodEnd().toLocalDate().toString() : "N/A");
+        }
+    }
+
+    // ── customer.subscription.deleted ────────────────────────────────────────
+
+    private void handleSubscriptionDeleted(Event event) {
+        Subscription sub = deserializeEvent(event, Subscription.class);
+        if (sub == null) return;
+
+        String customerId = sub.getCustomer();
+        log.info("[Stripe] customer.subscription.deleted: customer={}", customerId);
+
+        subscriptionRepository.findByStripeCustomerId(customerId).ifPresentOrElse(
+                userSub -> {
                     userSub.setStatus("canceled");
                     userSub.setPlan(PlanType.FREE.name());
                     subscriptionRepository.save(userSub);
 
-                    // Reset plan on User entity
                     User u = userSub.getUser();
                     u.setPlan(PlanType.FREE);
                     u.setPremiumActive(false);
                     userRepository.save(u);
 
+                    log.info("[Stripe] subscription canceled: user={}", u.getEmail());
                     emailService.sendSubscriptionCancelledEmail(u.getEmail(), u.getUsername());
-                });
+                },
+                () -> log.warn("[Stripe] subscription.deleted: no record found for customer={}", customerId)
+        );
     }
 
-    private void handlePaymentFailed(Event event) {
-        Invoice invoice = (Invoice) event.getDataObjectDeserializer()
-                .getObject().orElse(null);
+    // ── invoice.paid ──────────────────────────────────────────────────────────
+
+    /**
+     * Fired when Stripe collects payment — after the trial ends or on renewal.
+     * This is the authoritative signal that the subscription is now active.
+     */
+    private void handleInvoicePaid(Event event) {
+        Invoice invoice = deserializeEvent(event, Invoice.class);
         if (invoice == null) return;
 
-        subscriptionRepository.findByStripeCustomerId(invoice.getCustomer())
-                .ifPresent(userSub -> {
+        String customerId = invoice.getCustomer();
+        log.info("[Stripe] invoice.paid: customer={} amount={} {}",
+                customerId, invoice.getAmountPaid(), invoice.getCurrency());
+
+        subscriptionRepository.findByStripeCustomerId(customerId).ifPresentOrElse(
+                userSub -> {
+                    userSub.setStatus("active");
+                    if (invoice.getSubscription() != null) {
+                        userSub.setStripeSubscriptionId(invoice.getSubscription());
+                    }
+                    subscriptionRepository.save(userSub);
+
+                    User u = userSub.getUser();
+                    // Promote FREE users whose trial converted to paid
+                    if (u.getPlan() == PlanType.FREE) {
+                        u.setPlan(PlanType.PRO);
+                    }
+                    u.setStripeSubscriptionId(userSub.getStripeSubscriptionId());
+                    userRepository.save(u);
+
+                    log.info("[Stripe] invoice paid → subscription active: user={} plan={}",
+                            u.getEmail(), u.getPlan());
+                },
+                () -> log.warn("[Stripe] invoice.paid: no subscription found for customer={}", customerId)
+        );
+    }
+
+    // ── invoice.payment_failed ────────────────────────────────────────────────
+
+    private void handlePaymentFailed(Event event) {
+        Invoice invoice = deserializeEvent(event, Invoice.class);
+        if (invoice == null) return;
+
+        String customerId = invoice.getCustomer();
+        log.warn("[Stripe] invoice.payment_failed: customer={}", customerId);
+
+        subscriptionRepository.findByStripeCustomerId(customerId).ifPresentOrElse(
+                userSub -> {
                     userSub.setStatus("past_due");
                     subscriptionRepository.save(userSub);
-                    log.warn("Payment failed for customer {}", invoice.getCustomer());
+                    log.warn("[Stripe] subscription marked past_due: user={}",
+                            userSub.getUser().getEmail());
+                },
+                () -> log.warn("[Stripe] payment_failed: no subscription found for customer={}", customerId)
+        );
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Deserializes the event payload to the expected Stripe model type.
+     *
+     * Strategy:
+     *  1. Try the type-safe path ({@code getObject()}) first.
+     *  2. If it returns empty (Stripe API version mismatch between SDK and account),
+     *     fall back to {@code deserializeUnsafe()} and log a clear warning.
+     *  3. Log an error if both fail so the problem is immediately visible.
+     */
+    private <T> T deserializeEvent(Event event, Class<T> expectedType) {
+        EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
+        Object stripeObject;
+
+        if (deserializer.getObject().isPresent()) {
+            stripeObject = deserializer.getObject().get();
+        } else {
+            String rawJson = deserializer.getRawJson();
+            // временно просто лог
+            log.warn("[Stripe] RAW JSON: {}", rawJson);
+            return null;
+        }
+
+        // Fallback — version mismatch; try unsafe deserialization
+        log.warn("[Stripe] getObject() returned empty for event type={} " +
+                "(SDK version={}, event apiVersion={}). " +
+                "Consider pinning stripe.apiVersion in StripeClient or upgrading stripe-java.",
+                event.getType(), Stripe.VERSION, event.getApiVersion());
+        try {
+            StripeObject obj = deserializer.deserializeUnsafe();
+            if (expectedType.isInstance(obj)) {
+                return expectedType.cast(obj);
+            }
+            log.error("[Stripe] deserializeUnsafe returned {} but expected {}",
+                    obj.getClass().getSimpleName(), expectedType.getSimpleName());
+        } catch (Exception e) {
+            log.error("[Stripe] Failed to deserialize {} event: {}", event.getType(), e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Finds an existing UserSubscription by Stripe customer ID.
+     * If none exists (edge case: webhook arrived before our DB record was saved),
+     * falls back to looking up the User via User.stripeCustomerId and creates the row.
+     *
+     * @return existing or newly created UserSubscription, or null if no user found
+     */
+    private UserSubscription findOrCreateSubscriptionRecord(String customerId) {
+        return subscriptionRepository.findByStripeCustomerId(customerId)
+                .orElseGet(() -> {
+                    log.info("[Stripe] No UserSubscription for customer={}, trying User entity fallback",
+                            customerId);
+                    return userRepository.findByStripeCustomerId(customerId)
+                            .map(u -> {
+                                UserSubscription s = new UserSubscription();
+                                s.setUser(u);
+                                s.setStripeCustomerId(customerId);
+                                s.setStatus("trialing");
+                                s.setPlan(PlanType.FREE.name());
+                                return subscriptionRepository.save(s);
+                            })
+                            .orElse(null);
                 });
     }
 

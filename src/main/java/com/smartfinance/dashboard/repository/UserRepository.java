@@ -13,4 +13,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmailVerificationToken(String token);
     Optional<User> findByPasswordResetToken(String token);
     Optional<User> findByProviderAndProviderId(String provider, String providerId);
+
+    /** Used by webhook handler to look up user when UserSubscription record is missing. */
+    Optional<User> findByStripeCustomerId(String stripeCustomerId);
 }
