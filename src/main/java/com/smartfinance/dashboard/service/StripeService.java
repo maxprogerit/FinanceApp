@@ -23,6 +23,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -62,7 +64,9 @@ public class StripeService {
     }
 
     /**
-     * Creates a Stripe Checkout session for a monthly subscription.
+     * Creates a Stripe Checkout session for a subscription.
+     * On success, checkout.session.completed fires — the webhook handler
+     * immediately upgrades the user to PRO using metadata.userId.
      * Returns the session URL to redirect the user to.
      */
     public String createCheckoutSession(User user) throws StripeException {
@@ -71,16 +75,13 @@ public class StripeService {
         SessionCreateParams params = SessionCreateParams.builder()
                 .setMode(SessionCreateParams.Mode.SUBSCRIPTION)
                 .setCustomer(customerId)
-                .putMetadata("userId", user.getId().toString()) 
+                .putMetadata("userId", user.getId().toString())
                 .addLineItem(SessionCreateParams.LineItem.builder()
                         .setPrice(priceId)
                         .setQuantity(1L)
                         .build())
                 .setSuccessUrl(frontendUrl + "/settings?subscription=success")
                 .setCancelUrl(frontendUrl + "/settings?subscription=cancelled")
-                .setSubscriptionData(SessionCreateParams.SubscriptionData.builder()
-                        .setTrialPeriodDays(14L) // 14-day free trial
-                        .build())
                 .build();
 
         Session session = Session.create(params);
@@ -154,39 +155,110 @@ public class StripeService {
     // ── checkout.session.completed ────────────────────────────────────────────
 
     /**
-     * Fired when the user completes the Stripe Checkout form.
-     * Links the Stripe subscription ID to our UserSubscription row so that
-     * the subscription.created event can be matched immediately afterwards.
+     * Authoritative handler for a completed Stripe Checkout.
+     * In PAYMENT mode this is the only event that confirms payment — subscription
+     * lifecycle events (customer.subscription.*) are NOT fired.
+     *
+     * Deserialization strategy:
+     *  1. Typed SDK path (getObject()) — works when SDK and event API versions match.
+     *  2. Jackson raw-JSON fallback — handles version mismatches gracefully.
      */
     private void handleCheckoutCompleted(Event event) {
-        Session session = deserializeEvent(event, Session.class);
-        if (session == null) return;
+        EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
 
-        String customerId    = session.getCustomer();
-        String subscriptionId = session.getSubscription();
-        log.info("[Stripe] checkout.session.completed: customer={} subscription={}",
-                customerId, subscriptionId);
+        String paymentStatus  = null;
+        String userIdMeta     = null;
+        String customerId     = null;
+        String subscriptionId = null;
 
-        if (customerId == null) {
-            log.warn("[Stripe] checkout.session.completed: missing customer ID — skipping");
+        // ── Path 1: typed deserialization ──────────────────────────────────────
+        if (deserializer.getObject().isPresent()
+                && deserializer.getObject().get() instanceof Session session) {
+            paymentStatus  = session.getPaymentStatus();
+            customerId     = session.getCustomer();
+            subscriptionId = session.getSubscription();
+            userIdMeta     = session.getMetadata() != null
+                    ? session.getMetadata().get("userId") : null;
+            log.info("[Stripe] checkout.session.completed (typed): " +
+                    "paymentStatus={} customer={} subscription={} userId(meta)={}",
+                    paymentStatus, customerId, subscriptionId, userIdMeta);
+
+        } else {
+            // ── Path 2: raw JSON via Jackson ────────────────────────────────────
+            String rawJson = deserializer.getRawJson();
+            log.warn("[Stripe] checkout.session.completed: typed deserialization empty — " +
+                    "falling back to raw JSON (SDK {} vs event apiVersion {})",
+                    Stripe.VERSION, event.getApiVersion());
+            try {
+                JsonNode root  = new ObjectMapper().readTree(rawJson);
+                paymentStatus  = root.path("payment_status").asText(null);
+                customerId     = nullIfBlank(root.path("customer").asText(null));
+                subscriptionId = nullIfBlank(root.path("subscription").asText(null));
+                userIdMeta     = nullIfBlank(root.path("metadata").path("userId").asText(null));
+                log.info("[Stripe] checkout.session.completed (raw JSON): " +
+                        "paymentStatus={} customer={} subscription={} userId(meta)={}",
+                        paymentStatus, customerId, subscriptionId, userIdMeta);
+            } catch (Exception e) {
+                log.error("[Stripe] Failed to parse checkout.session.completed raw JSON: {}",
+                        e.getMessage());
+                return;
+            }
+        }
+
+        // ── Validate payment ────────────────────────────────────────────────────
+        // SUBSCRIPTION mode: "paid" = immediate payment, "no_payment_required" = trial started.
+        // Both mean the user has successfully subscribed and should be upgraded.
+        boolean isValidCheckout = "paid".equals(paymentStatus)
+                || "no_payment_required".equals(paymentStatus);
+        if (!isValidCheckout) {
+            log.info("[Stripe] checkout.session.completed: payment_status='{}' — unexpected value, skipping",
+                    paymentStatus);
             return;
         }
 
-        // Link the subscriptionId on the UserSubscription record (created by getOrCreateCustomerId)
-        UserSubscription userSub = findOrCreateSubscriptionRecord(customerId);
-        if (userSub == null) {
-            log.warn("[Stripe] checkout.session.completed: no user found for customer={}", customerId);
+        // ── Resolve user via metadata ───────────────────────────────────────────
+        if (userIdMeta == null) {
+            log.warn("[Stripe] checkout.session.completed: no userId in metadata — " +
+                    "cannot link payment to a user. Ensure putMetadata(\"userId\", ...) " +
+                    "is set when creating the Checkout Session.");
             return;
         }
-        if (subscriptionId != null) {
-            userSub.setStripeSubscriptionId(subscriptionId);
-            subscriptionRepository.save(userSub);
-            // Mirror on User entity
-            User u = userSub.getUser();
-            u.setStripeSubscriptionId(subscriptionId);
-            userRepository.save(u);
+        long userId;
+        try {
+            userId = Long.parseLong(userIdMeta);
+        } catch (NumberFormatException e) {
+            log.warn("[Stripe] checkout.session.completed: invalid userId metadata='{}'", userIdMeta);
+            return;
         }
-        log.info("[Stripe] checkout linked: user={} customer={}", userSub.getUser().getEmail(), customerId);
+        User u = userRepository.findById(userId).orElse(null);
+        if (u == null) {
+            log.warn("[Stripe] checkout.session.completed: user not found for userId={}", userId);
+            return;
+        }
+
+        // ── Upgrade user plan ───────────────────────────────────────────────────
+        u.setPlan(PlanType.PRO);
+        u.setPremiumActive(false); // PRO tier, not PREMIUM
+        if (customerId     != null) u.setStripeCustomerId(customerId);
+        if (subscriptionId != null) u.setStripeSubscriptionId(subscriptionId);
+        userRepository.save(u);
+        log.info("[Stripe] user upgraded to PRO: userId={} email={}", u.getId(), u.getEmail());
+
+        // ── Upsert UserSubscription record ──────────────────────────────────────
+        UserSubscription userSub = subscriptionRepository.findByUser(u).orElseGet(() -> {
+            UserSubscription s = new UserSubscription();
+            s.setUser(u);
+            return s;
+        });
+        if (customerId     != null) userSub.setStripeCustomerId(customerId);
+        if (subscriptionId != null) userSub.setStripeSubscriptionId(subscriptionId);
+        userSub.setStatus("active");
+        userSub.setPlan(PlanType.PRO.name());
+        subscriptionRepository.save(userSub);
+
+        emailService.sendSubscriptionConfirmation(
+                u.getEmail(), u.getUsername(), PlanType.PRO.name(), "N/A");
+        log.info("[Stripe] checkout complete: user={} plan=PRO customer={}", u.getEmail(), customerId);
     }
 
     // ── customer.subscription.created / updated ───────────────────────────────
@@ -334,38 +406,42 @@ public class StripeService {
      * Deserializes the event payload to the expected Stripe model type.
      *
      * Strategy:
-     *  1. Try the type-safe path ({@code getObject()}) first.
-     *  2. If it returns empty (Stripe API version mismatch between SDK and account),
-     *     fall back to {@code deserializeUnsafe()} and log a clear warning.
+     *  1. Try the type-safe path ({@code getObject()}) first — works when the SDK
+     *     version matches the event's Stripe API version.
+     *  2. If it returns empty (API version mismatch), fall back to
+     *     {@code deserializeUnsafe()} and log a clear warning.
      *  3. Log an error if both fail so the problem is immediately visible.
      */
     private <T> T deserializeEvent(Event event, Class<T> expectedType) {
         EventDataObjectDeserializer deserializer = event.getDataObjectDeserializer();
-        Object stripeObject;
 
+        // Primary path: SDK version matches — safe, typed deserialization
         if (deserializer.getObject().isPresent()) {
-            stripeObject = deserializer.getObject().get();
-        } else {
-            String rawJson = deserializer.getRawJson();
-            // временно просто лог
-            log.warn("[Stripe] RAW JSON: {}", rawJson);
+            Object obj = deserializer.getObject().get();
+            if (expectedType.isInstance(obj)) {
+                return expectedType.cast(obj);
+            }
+            log.error("[Stripe] getObject() returned {} but expected {} for event type={}",
+                    obj.getClass().getSimpleName(), expectedType.getSimpleName(), event.getType());
             return null;
         }
 
-        // Fallback — version mismatch; try unsafe deserialization
+        // Fallback: API version mismatch — try unsafe deserialization
         log.warn("[Stripe] getObject() returned empty for event type={} " +
                 "(SDK version={}, event apiVersion={}). " +
-                "Consider pinning stripe.apiVersion in StripeClient or upgrading stripe-java.",
+                "Consider upgrading stripe-java or pinning Stripe.apiVersion.",
                 event.getType(), Stripe.VERSION, event.getApiVersion());
         try {
             StripeObject obj = deserializer.deserializeUnsafe();
             if (expectedType.isInstance(obj)) {
+                log.info("[Stripe] deserializeUnsafe succeeded for event type={}", event.getType());
                 return expectedType.cast(obj);
             }
             log.error("[Stripe] deserializeUnsafe returned {} but expected {}",
                     obj.getClass().getSimpleName(), expectedType.getSimpleName());
         } catch (Exception e) {
             log.error("[Stripe] Failed to deserialize {} event: {}", event.getType(), e.getMessage());
+            log.debug("[Stripe] Raw JSON: {}", deserializer.getRawJson());
         }
         return null;
     }
@@ -448,5 +524,10 @@ public class StripeService {
         return Instant.ofEpochSecond(epochSeconds)
                 .atZone(ZoneId.systemDefault())
                 .toLocalDateTime();
+    }
+
+    /** Returns null for null, empty, or "null" strings coming from Jackson asText(). */
+    private static String nullIfBlank(String s) {
+        return (s == null || s.isBlank() || "null".equals(s)) ? null : s;
     }
 }
