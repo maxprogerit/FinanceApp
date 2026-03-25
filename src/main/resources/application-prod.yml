@@ -33,9 +33,6 @@ spring.thymeleaf.cache=true
 spring.thymeleaf.prefix=classpath:/templates/
 spring.thymeleaf.suffix=.html
 
-# H2 console — disabled in production
-spring.h2.console.enabled=false
-
 spring.application.name=Smart Finance Dashboard
 
 # Jackson

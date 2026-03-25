@@ -71,8 +71,7 @@ public class SecurityConfig {
                     "/api/auth/token",
                     "/api/payments/webhook",  // Stripe webhooks are verified by signature
                     "/css/**", "/js/**", "/images/**",
-                    "/actuator/health",
-                    "/h2-console/**"
+                    "/actuator/health"
                 ).permitAll()
                 .requestMatchers("/admin", "/admin/**", "/api/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
@@ -113,12 +112,12 @@ public class SecurityConfig {
 
             // CSRF — disabled for API and webhooks (APIs use JWT; webhook uses Stripe signature)
             .csrf(csrf -> csrf
-                .ignoringRequestMatchers("/h2-console/**", "/api/**")
+                .ignoringRequestMatchers("/api/**")
             )
 
             // Security headers
             .headers(headers -> headers
-                .frameOptions(frame -> frame.sameOrigin()) // for H2 console
+                .frameOptions(frame -> frame.sameOrigin())
                 .contentTypeOptions(ct -> {})
                 .xssProtection(xss -> {})
             );
