@@ -1,5 +1,6 @@
 package com.smartfinance.dashboard.service;
 
+import com.smartfinance.dashboard.dto.QuickAddDTO;
 import com.smartfinance.dashboard.model.Transaction;
 import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.repository.TransactionRepository;
@@ -19,6 +20,7 @@ public class TransactionService {
 
     private final TransactionRepository transactionRepository;
     private final BudgetService budgetService;
+    private final CategorizationRuleService categorizationRuleService;
 
     @Transactional
     public Transaction createTransaction(Transaction transaction, User user) {
@@ -31,15 +33,46 @@ public class TransactionService {
         return saved;
     }
 
+    /**
+     * Quick-add a transaction from minimal input.
+     * Server fills in: user, date (now), currency (user's baseCurrency).
+     * Category is auto-detected from description when not provided.
+     */
+    @Transactional
+    public Transaction quickAdd(QuickAddDTO dto, User user) {
+        String type     = dto.type()   != null ? dto.type().toUpperCase() : "EXPENSE";
+        String currency = user.getBaseCurrency() != null ? user.getBaseCurrency() : "USD";
+
+        String category = (dto.category() != null && !dto.category().isBlank())
+                ? dto.category()
+                : categorizationRuleService.applyRules(dto.description(), user);
+
+        Transaction t = new Transaction();
+        t.setUser(user);
+        t.setType(type);
+        t.setAmount(dto.amount().abs());
+        t.setCurrency(currency);
+        t.setCategory(category);
+        t.setDescription(dto.description());
+        t.setTransactionDate(LocalDateTime.now());
+        t.setIsRecurring(false);
+
+        Transaction saved = transactionRepository.save(t);
+        if ("EXPENSE".equals(type)) {
+            budgetService.updateBudgetSpending(category, t.getAmount(), currency, user);
+        }
+        return saved;
+    }
+
     @Transactional
     public Transaction updateTransaction(Long id, Transaction transaction, User user) {
         Transaction existing = transactionRepository.findByIdAndUser(id, user)
                 .orElseThrow(() -> new RuntimeException("Transaction not found"));
 
-        BigDecimal oldAmount = existing.getAmount();
-        String oldCategory = existing.getCategory();
-        String oldCurrency = existing.getCurrency();
-        String oldType = existing.getType();
+        BigDecimal oldAmount   = existing.getAmount();
+        String     oldCategory = existing.getCategory();
+        String     oldCurrency = existing.getCurrency();
+        String     oldType     = existing.getType();
 
         existing.setType(transaction.getType());
         existing.setAmount(transaction.getAmount());
@@ -62,6 +95,15 @@ public class TransactionService {
         if ("EXPENSE".equals(transaction.getType())) {
             budgetService.updateBudgetSpending(
                     transaction.getCategory(), transaction.getAmount(), transaction.getCurrency(), user);
+        }
+
+        // Track category correction for auto-learn — REQUIRES_NEW transaction,
+        // any failure here must not roll back the main update.
+        if (transaction.getDescription() != null && transaction.getCategory() != null) {
+            try {
+                categorizationRuleService.maybeAutoLearn(
+                        transaction.getDescription(), transaction.getCategory(), user);
+            } catch (Exception ignored) { /* non-critical */ }
         }
 
         return updated;

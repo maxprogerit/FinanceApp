@@ -91,7 +91,6 @@ async function fetchPlanState() {
 function isProUser() {
     if (!_planState) return false;
     const plan = _planState.plan;
-    if (plan === 'PREMIUM') return true;
     return plan === 'PRO' && (_planState.status === 'active' || _planState.status === 'trialing');
 }
 

@@ -4,6 +4,7 @@ import com.smartfinance.dashboard.model.Investment;
 import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.repository.InvestmentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +15,11 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class InvestmentService {
 
     private final InvestmentRepository investmentRepository;
+    private final MarketDataService    marketDataService;
 
     @Transactional
     public Investment createInvestment(Investment investment, User user) {
@@ -79,9 +82,7 @@ public class InvestmentService {
 
     public double getTotalProfitLossPercentage(User user) {
         BigDecimal investment = getTotalInvestmentValue(user);
-        if (investment.compareTo(BigDecimal.ZERO) == 0) {
-            return 0;
-        }
+        if (investment.compareTo(BigDecimal.ZERO) == 0) return 0;
         return getTotalProfitLoss(user)
                 .divide(investment, 4, java.math.RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100))
@@ -99,5 +100,32 @@ public class InvestmentService {
         Investment investment = getInvestmentById(id, user);
         investment.setCurrentPrice(newPrice);
         investmentRepository.save(investment);
+    }
+
+    /**
+     * Fetches live market prices for all of a user's investments and persists
+     * any new values. Symbols with no price data (API disabled or symbol unknown)
+     * are silently skipped — existing prices are preserved.
+     *
+     * @return number of prices actually updated
+     */
+    @Transactional
+    public int refreshPrices(User user) {
+        List<Investment> investments = investmentRepository.findByUser(user);
+        int updated = 0;
+        for (Investment inv : investments) {
+            try {
+                BigDecimal fresh = marketDataService.getPrice(inv.getSymbol());
+                if (fresh != null && fresh.compareTo(BigDecimal.ZERO) > 0) {
+                    inv.setCurrentPrice(fresh);
+                    investmentRepository.save(inv);
+                    updated++;
+                }
+            } catch (Exception ex) {
+                log.warn("Price refresh failed for symbol {}: {}", inv.getSymbol(), ex.getMessage());
+            }
+        }
+        if (updated > 0) log.info("Refreshed {} investment price(s) for user {}", updated, user.getUsername());
+        return updated;
     }
 }

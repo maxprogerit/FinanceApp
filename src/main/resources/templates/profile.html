@@ -136,9 +136,8 @@ function renderProfile(p) {
     // Plan badge
     const badge = document.getElementById('profilePlanBadge');
     const planColors = {
-        FREE:    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
-        PRO:     'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
-        PREMIUM: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300',
+        FREE: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+        PRO:  'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
     };
     badge.textContent = p.plan;
     badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${planColors[p.plan] || planColors.FREE}`;
@@ -157,12 +156,11 @@ function renderProfile(p) {
     // Subscription
     document.getElementById('subPlanLabel').textContent = p.plan + ' Plan';
     document.getElementById('subStatus').textContent =
-        p.premiumActive ? 'Active — all premium features unlocked'
-                        : p.plan === 'FREE' ? 'Free tier — upgrade to unlock more features'
-                                            : 'Subscription inactive';
+        p.plan === 'PRO' ? 'Active — all Pro features unlocked'
+                         : 'Free tier — upgrade to unlock more features';
 
     const actionArea = document.getElementById('subActionArea');
-    if (!p.premiumActive && p.plan === 'FREE') {
+    if (p.plan === 'FREE') {
         actionArea.innerHTML = `<button class="btn-primary" onclick="openUpgradeModal()">Upgrade</button>`;
     } else {
         actionArea.innerHTML = `<a href="/settings" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">Manage →</a>`;

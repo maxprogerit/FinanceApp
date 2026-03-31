@@ -524,7 +524,7 @@ async function loadPlanStatus() {
 
         const plan      = s.plan   || 'FREE';
         const subStatus = s.status || '';
-        const isPro     = (plan === 'PRO' || plan === 'PREMIUM') && (subStatus === 'active' || subStatus === 'trialing');
+        const isPro     = plan === 'PRO' && (subStatus === 'active' || subStatus === 'trialing');
 
         if (isPro) {
             const trialText = subStatus === 'trialing' ? 'Trial active' : 'Active subscription';

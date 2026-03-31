@@ -14,7 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.Map;
 
 /**
- * CSV import — premium feature requiring an active Pro or Premium subscription.
+ * CSV import — Pro feature requiring an active Pro subscription.
  */
 @RestController
 @RequestMapping("/api/import")

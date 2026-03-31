@@ -51,10 +51,6 @@ public class StripeService {
     @Value("${stripe.pro-price-id:}")
     private String proPriceId;
 
-    /** Stripe price ID that maps to the PREMIUM plan. Leave blank if not yet configured. */
-    @Value("${stripe.premium-price-id:}")
-    private String premiumPriceId;
-
     @Value("${app.frontend-url}")
     private String frontendUrl;
 
@@ -238,7 +234,7 @@ public class StripeService {
 
         // ── Upgrade user plan ───────────────────────────────────────────────────
         u.setPlan(PlanType.PRO);
-        u.setPremiumActive(false); // PRO tier, not PREMIUM
+        u.setPremiumActive(false);
         if (customerId     != null) u.setStripeCustomerId(customerId);
         if (subscriptionId != null) u.setStripeSubscriptionId(subscriptionId);
         userRepository.save(u);
@@ -303,7 +299,7 @@ public class StripeService {
         User u = userSub.getUser();
         u.setPlan(plan);
         u.setStripeSubscriptionId(sub.getId());
-        u.setPremiumActive(plan == PlanType.PREMIUM && isActive);
+        u.setPremiumActive(false);
         userRepository.save(u);
 
         log.info("[Stripe] subscription updated: user={} plan={} status={}", u.getEmail(), plan, status);
@@ -512,11 +508,9 @@ public class StripeService {
 
     /**
      * Maps a Stripe price ID to the corresponding PlanType.
-     * Defaults to PRO for any paid price that is not explicitly mapped to PREMIUM.
+     * All paid prices map to PRO — there is no secondary tier.
      */
     private PlanType mapPriceToPlan(String stripePriceId) {
-        if (stripePriceId == null) return PlanType.PRO;
-        if (!premiumPriceId.isBlank() && premiumPriceId.equals(stripePriceId)) return PlanType.PREMIUM;
         return PlanType.PRO;
     }
 

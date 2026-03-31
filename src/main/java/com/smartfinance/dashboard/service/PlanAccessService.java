@@ -8,36 +8,35 @@ import org.springframework.stereotype.Service;
  * Centralises plan-based feature access checks.
  * Use this service in controllers instead of checking plan strings directly.
  *
- * Feature keys (conventions):
- *   "csv_import"           — bulk CSV transaction import
- *   "export"               — CSV / PDF export
- *   "advanced_analytics"   — AI insights, spending forecast
- *   "premium_only_feature" — reserved for PREMIUM-tier features
+ * Plans: FREE (default) and PRO (paid).
+ * PRO users unlock all paid features — there is no secondary PREMIUM tier.
+ *
+ * Feature keys:
+ *   "csv_import"                  — bulk CSV transaction import
+ *   "export"                      — CSV / PDF export
+ *   "advanced_analytics"          — AI insights, spending forecast
+ *   "receipt_ocr"                 — receipt scanning via OCR
+ *   "auto_detect"                 — auto-detect from bank notifications
+ *   "advanced_autocategorization" — auto-learn categorization rules
  */
 @Service
 public class PlanAccessService {
 
     /**
      * Returns true if the user's plan grants access to the given feature.
-     * PREMIUM users can access everything.
-     * PRO users can access all features except "premium_only_feature".
+     * PRO users can access all paid features.
      * FREE users have no access to paid features.
      */
     public boolean hasAccess(User user, String feature) {
         PlanType plan = user.getPlan() != null ? user.getPlan() : PlanType.FREE;
-
-        return switch (plan) {
-            case PREMIUM -> true;
-            case PRO     -> !feature.equals("premium_only_feature");
-            case FREE    -> false;
-        };
+        return plan == PlanType.PRO;
     }
 
     /**
-     * Convenience: returns true if the user is on PRO or PREMIUM.
+     * Convenience: returns true if the user is on PRO plan.
      */
     public boolean isPaidUser(User user) {
         PlanType plan = user.getPlan() != null ? user.getPlan() : PlanType.FREE;
-        return plan == PlanType.PRO || plan == PlanType.PREMIUM;
+        return plan == PlanType.PRO;
     }
 }
