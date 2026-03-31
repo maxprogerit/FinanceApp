@@ -8,63 +8,73 @@
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="bg-gray-50 dark:bg-gray-900">
-    
-    <!-- Navigation (same as dashboard) -->
+
+    <!-- Legacy nav — app.js sidebar injection detects this and hides it -->
     <nav class="bg-white dark:bg-gray-800 shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
-                <div class="flex">
-                    <div class="flex-shrink-0 flex items-center">
-                        <h1 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">💰 Smart Finance</h1>
-                    </div>
-                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
-                        <a href="/dashboard" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</a>
-                        <a href="/transactions" class="nav-link border-indigo-500 text-gray-900 dark:text-white inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Transactions</a>
-                        <a href="/budgets" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Budgets</a>
-                        <a href="/investments" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Investments</a>
-                        <a href="/goals" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Goals</a>
-                        <a href="/reports" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Reports</a>
-                        <a href="/subscriptions" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Subscriptions</a>
-                        <a href="/debts" class="nav-link border-transparent text-gray-500 dark:text-gray-300 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Debts</a>
-                    </div>
-                </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/settings" class="text-sm text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-400">Settings</a>
-                    <button id="themeToggle" class="p-2 rounded-full text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-                        <svg id="themeIcon" class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
-                        </svg>
-                    </button>
-                    <a href="/logout" class="text-sm text-red-500 hover:text-red-700">Logout</a>
-                </div>
+            <div class="flex items-center h-16">
+                <h1 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">💰 Smart Finance</h1>
             </div>
         </div>
     </nav>
 
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div class="px-4 py-6 sm:px-0">
-            <div class="flex justify-between items-center mb-6">
+
+            <!-- Page header & toolbar -->
+            <div class="flex flex-wrap justify-between items-center gap-3 mb-5">
                 <h2 class="text-3xl font-bold text-gray-900 dark:text-white">Transactions</h2>
-                <button id="addTransactionBtn" class="btn btn-primary">
-                    <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    Add Transaction
-                </button>
-                <button id="importCsvBtn" class="btn btn-secondary">
-                    <svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
-                    </svg>
-                    Import CSV
-                </button>
+                <div class="flex gap-2 flex-wrap">
+                    <button id="addTransactionBtn" class="btn btn-primary">
+                        <svg class="inline-block w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Add Transaction
+                    </button>
+                    <button id="importCsvBtn" class="btn btn-secondary" title="Import from CSV (Pro+)">
+                        <svg class="inline-block w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                        </svg>
+                        Import CSV
+                    </button>
+                </div>
                 <input type="file" id="csvFileInput" accept=".csv" class="hidden">
             </div>
 
-            <!-- Filters -->
+            <!-- Quick Add bar ──────────────────────────────────────────────── -->
+            <div class="card mb-5">
+                <div class="flex items-start gap-3">
+                    <div class="flex-1">
+                        <div class="flex gap-2">
+                            <input
+                                id="quickAddInput"
+                                type="text"
+                                class="input flex-1 text-base"
+                                placeholder='Type "500 coffee" or "+30000 salary" and press Enter'
+                                autocomplete="off"
+                                spellcheck="false"
+                            >
+                            <button id="quickAddBtn" class="btn btn-primary whitespace-nowrap" style="min-width:88px">
+                                ↵&nbsp;Add
+                            </button>
+                        </div>
+                        <div id="quickAddHint" class="text-xs mt-1 min-h-[1rem]"></div>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                    Examples:&nbsp;
+                    <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">450 coffee</code>&nbsp;
+                    <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">1200 taxi</code>&nbsp;
+                    <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">+30000 salary</code>&nbsp;
+                    <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">-800 gym march</code>
+                </p>
+            </div>
+
+            <!-- Filters ────────────────────────────────────────────────────── -->
             <div class="card mb-6">
                 <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Type</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
                         <select id="filterType" class="input">
                             <option value="">All</option>
                             <option value="INCOME">Income</option>
@@ -72,32 +82,32 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
                         <select id="filterCategory" class="input">
                             <option value="">All Categories</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tag</label>
-                        <input type="text" id="filterTag" class="input" placeholder="Filter by tag...">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tag</label>
+                        <input type="text" id="filterTag" class="input" placeholder="Filter by tag…">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">From Date</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">From</label>
                         <input type="date" id="filterStartDate" class="input">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">To Date</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">To</label>
                         <input type="date" id="filterEndDate" class="input">
                     </div>
                 </div>
-                <div class="mt-4 flex justify-end space-x-2">
-                    <button id="applyFilters" class="btn btn-primary">Apply Filters</button>
+                <div class="mt-4 flex justify-end gap-2">
+                    <button id="applyFilters" class="btn btn-primary">Apply</button>
                     <button id="clearFilters" class="btn btn-secondary">Clear</button>
-                    <button id="exportCSV" class="btn btn-secondary">Export CSV</button>
+                    <button id="exportCSV"    class="btn btn-secondary" title="Export CSV (Pro+)">Export CSV</button>
                 </div>
             </div>
 
-            <!-- Transactions Table -->
+            <!-- Transactions Table ──────────────────────────────────────────── -->
             <div class="card card-table overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="table-modern min-w-full">
@@ -113,92 +123,122 @@
                                 <th class="col-right">Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="transactionsTable">
-                            <!-- Transactions will be loaded here -->
-                        </tbody>
+                        <tbody id="transactionsTable"></tbody>
                     </table>
                 </div>
             </div>
+
         </div>
     </main>
 
-    <!-- Add/Edit Transaction Modal -->
+    <!-- Add / Edit Transaction Modal ─────────────────────────────────────────── -->
     <div id="transactionModal" class="modal hidden">
-        <div class="modal-content p-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold text-gray-900 dark:text-white" id="modalTitle">Add Transaction</h3>
-                <button id="closeModal" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        <div class="modal-content p-0" style="max-width:560px;width:100%">
+
+            <div class="modal-header">
+                <h3 class="modal-title" id="modalTitle">Add Transaction</h3>
+                <button id="closeModal" class="modal-close" aria-label="Close">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
                 </button>
             </div>
-            <form id="transactionForm">
-                <input type="hidden" id="transactionId">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Type</label>
-                        <select id="type" required class="input">
-                            <option value="INCOME">Income</option>
-                            <option value="EXPENSE">Expense</option>
-                        </select>
+
+            <div class="modal-body">
+                <form id="transactionForm" class="space-y-4">
+                    <input type="hidden" id="transactionId">
+
+                    <!-- Type + Amount -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
+                            <select id="type" required class="input">
+                                <option value="EXPENSE">Expense</option>
+                                <option value="INCOME">Income</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Amount</label>
+                            <input type="number" id="amount" step="0.01" min="0.01" required class="input" placeholder="0.00">
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Amount</label>
-                        <input type="number" id="amount" step="0.01" required class="input" placeholder="0.00">
+
+                    <!-- Currency + Category -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Currency</label>
+                            <select id="currency" required class="input">
+                                <option value="USD">USD – US Dollar</option>
+                                <option value="EUR">EUR – Euro</option>
+                                <option value="GBP">GBP – British Pound</option>
+                                <option value="JPY">JPY – Japanese Yen</option>
+                                <option value="CAD">CAD – Canadian Dollar</option>
+                                <option value="AUD">AUD – Australian Dollar</option>
+                                <option value="CHF">CHF – Swiss Franc</option>
+                                <option value="CNY">CNY – Chinese Yuan</option>
+                                <option value="INR">INR – Indian Rupee</option>
+                                <option value="BRL">BRL – Brazilian Real</option>
+                                <option value="RSD">RSD – Serbian Dinar</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                            <select id="category" required class="input"></select>
+                        </div>
                     </div>
+
+                    <!-- Storage Type -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Currency</label>
-                        <select id="currency" required class="input">
-                            <option value="USD">USD - US Dollar</option>
-                            <option value="EUR">EUR - Euro</option>
-                            <option value="GBP">GBP - British Pound</option>
-                            <option value="JPY">JPY - Japanese Yen</option>
-                            <option value="CAD">CAD - Canadian Dollar</option>
-                            <option value="AUD">AUD - Australian Dollar</option>
-                            <option value="CHF">CHF - Swiss Franc</option>
-                            <option value="CNY">CNY - Chinese Yuan</option>
-                            <option value="INR">INR - Indian Rupee</option>
-                            <option value="BRL">BRL - Brazilian Real</option>
-                            <option value="RSD">RSD - Serbian Dinar</option>
-                        </select>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Storage Type</label>
+                        <select id="storageType" class="input"></select>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</label>
-                        <select id="category" required class="input">
-                            <!-- Categories will be loaded dynamically -->
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Storage Type</label>
-                        <select id="storageType" class="input">
-                            <option value="">— None / Not specified —</option>
-                        </select>
-                    </div>
+
+                    <!-- Income Source (hidden unless type = INCOME) -->
                     <div id="incomeSourceField" class="hidden">
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Income Source</label>
-                        <select id="incomeSource" class="input">
-                            <option value="">— None / Not specified —</option>
-                        </select>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Income Source</label>
+                        <select id="incomeSource" class="input"></select>
                     </div>
+
+                    <!-- Description + Scan Receipt button -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</label>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                            <button type="button" id="scanReceiptBtn"
+                                    class="text-xs text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 flex items-center gap-1"
+                                    title="Scan a receipt image (Pro+)">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                Scan Receipt
+                            </button>
+                        </div>
                         <input type="text" id="description" class="input" placeholder="Transaction description">
+                        <input type="file" id="receiptFileInput" accept="image/*,application/pdf" class="hidden">
                     </div>
+
+                    <!-- Tags -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tags <span class="text-gray-400 font-normal">(comma-separated, e.g. travel, work)</span></label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Tags <span class="text-gray-400 font-normal">(comma-separated)</span>
+                        </label>
                         <input type="text" id="tags" class="input" placeholder="travel, work, urgent">
                     </div>
+
+                    <!-- Date -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date &amp; Time</label>
                         <input type="datetime-local" id="transactionDate" required class="input">
                     </div>
-                    <div class="flex items-center">
-                        <input type="checkbox" id="isRecurring" class="mr-2">
-                        <label for="isRecurring" class="text-sm text-gray-700 dark:text-gray-300">Recurring Transaction</label>
+
+                    <!-- Recurring -->
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="isRecurring" class="rounded">
+                        <label for="isRecurring" class="text-sm text-gray-700 dark:text-gray-300">Recurring transaction</label>
                     </div>
                     <div id="recurringOptions" class="hidden">
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Frequency</label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Frequency</label>
                         <select id="recurringFrequency" class="input">
                             <option value="DAILY">Daily</option>
                             <option value="WEEKLY">Weekly</option>
@@ -206,17 +246,20 @@
                             <option value="YEARLY">Yearly</option>
                         </select>
                     </div>
-                </div>
-                <div class="flex justify-end space-x-2 mt-6">
-                    <button type="button" id="cancelBtn" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Transaction</button>
-                </div>
-            </form>
+
+                    <!-- Form actions -->
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button type="button" id="cancelBtn" class="btn btn-secondary">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Transaction</button>
+                    </div>
+                </form>
+            </div>
+
         </div>
     </div>
 
     <script src="/js/theme.js"></script>
-    <script src="/js/app.js"></script>
-    <script src="/js/transactions.js"></script>
+    <script type="module" src="/js/main.js"></script>
+    <script type="module" src="/js/features/transactions.js"></script>
 </body>
 </html>

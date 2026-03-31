@@ -1,40 +1,47 @@
 -- ============================================================
--- V1 — Initial schema for Smart Finance Dashboard (PostgreSQL)
--- Run automatically by Flyway on first startup with prod profile.
+-- V1 — Full schema for Smart Finance Dashboard (PostgreSQL)
+-- Single consolidated migration — run automatically by Flyway.
 -- ============================================================
 
 -- Users
 CREATE TABLE IF NOT EXISTS users (
-    id                         BIGSERIAL PRIMARY KEY,
-    username                   VARCHAR(255) NOT NULL UNIQUE,
-    email                      VARCHAR(255) NOT NULL UNIQUE,
-    password                   VARCHAR(255) NOT NULL,
-    role                       VARCHAR(50)  NOT NULL DEFAULT 'USER',
-    base_currency              VARCHAR(10)  NOT NULL DEFAULT 'USD',
-    theme                      VARCHAR(50)  NOT NULL DEFAULT 'light',
-    provider                   VARCHAR(50),
-    provider_id                VARCHAR(255),
-    email_verified             BOOLEAN      NOT NULL DEFAULT FALSE,
-    email_verification_token   VARCHAR(255),
-    password_reset_token       VARCHAR(255),
-    password_reset_expiry      TIMESTAMP,
-    created_at                 TIMESTAMP    NOT NULL DEFAULT NOW()
+    id                              BIGSERIAL PRIMARY KEY,
+    username                        VARCHAR(255) NOT NULL UNIQUE,
+    email                           VARCHAR(255) NOT NULL UNIQUE,
+    password                        VARCHAR(255) NOT NULL,
+    role                            VARCHAR(50)  NOT NULL DEFAULT 'USER',
+    base_currency                   VARCHAR(10)  NOT NULL DEFAULT 'USD',
+    theme                           VARCHAR(50)  NOT NULL DEFAULT 'light',
+    provider                        VARCHAR(50),
+    provider_id                     VARCHAR(255),
+    email_verified                  BOOLEAN      NOT NULL DEFAULT FALSE,
+    email_verification_token        VARCHAR(255),
+    email_verification_token_expiry TIMESTAMP,
+    password_reset_token            VARCHAR(255),
+    password_reset_expiry           TIMESTAMP,
+    plan                            VARCHAR(50)  NOT NULL DEFAULT 'FREE',
+    stripe_customer_id              VARCHAR(255),
+    stripe_subscription_id          VARCHAR(255),
+    premium_active                  BOOLEAN      NOT NULL DEFAULT FALSE,
+    bio                             VARCHAR(500),
+    avatar_url                      VARCHAR(500),
+    created_at                      TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
 -- Transactions
 CREATE TABLE IF NOT EXISTS transactions (
     id                   BIGSERIAL PRIMARY KEY,
-    user_id              BIGINT       NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type                 VARCHAR(20)  NOT NULL,          -- INCOME | EXPENSE
+    user_id              BIGINT        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type                 VARCHAR(20)   NOT NULL,          -- INCOME | EXPENSE
     amount               NUMERIC(19,2) NOT NULL,
-    currency             VARCHAR(10)  NOT NULL,
-    category             VARCHAR(255) NOT NULL,
+    currency             VARCHAR(10)   NOT NULL,
+    category             VARCHAR(255)  NOT NULL,
     description          VARCHAR(500),
-    transaction_date     TIMESTAMP    NOT NULL,
-    created_at           TIMESTAMP    NOT NULL DEFAULT NOW(),
+    transaction_date     TIMESTAMP     NOT NULL,
+    created_at           TIMESTAMP     NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMP,
-    is_recurring         BOOLEAN      NOT NULL DEFAULT FALSE,
-    recurring_frequency  VARCHAR(50),                    -- DAILY | WEEKLY | MONTHLY | YEARLY
+    is_recurring         BOOLEAN       NOT NULL DEFAULT FALSE,
+    recurring_frequency  VARCHAR(50),                     -- DAILY | WEEKLY | MONTHLY | YEARLY
     tags                 TEXT,
     storage_type         VARCHAR(255),
     income_source        VARCHAR(255)
@@ -120,7 +127,7 @@ CREATE INDEX IF NOT EXISTS idx_debts_user_id ON debts(user_id);
 -- Alerts
 CREATE TABLE IF NOT EXISTS alerts (
     id                  BIGSERIAL PRIMARY KEY,
-    user_id             BIGINT   REFERENCES users(id) ON DELETE CASCADE,
+    user_id             BIGINT        REFERENCES users(id) ON DELETE CASCADE,
     type                VARCHAR(50)   NOT NULL,
     severity            VARCHAR(20)   NOT NULL,
     title               VARCHAR(255)  NOT NULL,
@@ -142,12 +149,13 @@ CREATE TABLE IF NOT EXISTS categories (
     icon        VARCHAR(50),
     color       VARCHAR(20),
     description TEXT,
-    is_default  BOOLEAN NOT NULL DEFAULT FALSE,
-    is_active   BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+    is_default  BOOLEAN   NOT NULL DEFAULT FALSE,
+    is_active   BOOLEAN   NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMP
 );
 
--- Storage Types (builtIn or user-created)
+-- Storage Types (built-in or user-created)
 CREATE TABLE IF NOT EXISTS storage_types (
     id       BIGSERIAL PRIMARY KEY,
     name     VARCHAR(255) NOT NULL UNIQUE,
@@ -155,7 +163,7 @@ CREATE TABLE IF NOT EXISTS storage_types (
     built_in BOOLEAN NOT NULL DEFAULT FALSE
 );
 
--- Income Sources (builtIn or user-created)
+-- Income Sources (built-in or user-created)
 CREATE TABLE IF NOT EXISTS income_sources (
     id       BIGSERIAL PRIMARY KEY,
     name     VARCHAR(255) NOT NULL UNIQUE,
@@ -179,7 +187,7 @@ CREATE INDEX IF NOT EXISTS idx_cat_rules_user_id ON categorization_rules(user_id
 -- User Subscriptions (Stripe)
 CREATE TABLE IF NOT EXISTS user_subscriptions (
     id                     BIGSERIAL PRIMARY KEY,
-    user_id                BIGINT      NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    user_id                BIGINT       NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     stripe_customer_id     VARCHAR(255) NOT NULL,
     stripe_subscription_id VARCHAR(255),
     status                 VARCHAR(50)  NOT NULL DEFAULT 'trialing',

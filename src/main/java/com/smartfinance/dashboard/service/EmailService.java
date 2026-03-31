@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * Sends transactional emails: verification, password reset, subscription events.
@@ -68,7 +70,7 @@ public class EmailService {
                 <p>Hi %s,</p>
                 <p>Your <strong>%s</strong> subscription is now active.</p>
                 <p>Next renewal: <strong>%s</strong></p>
-                <p>You now have access to all premium features.</p>
+                <p>You now have access to all Pro features.</p>
                 """.formatted(username, planName, renewalDate);
         send(toEmail, subject, html);
     }
@@ -82,6 +84,76 @@ public class EmailService {
                 <p>Your subscription has been cancelled. You will retain access until the end of your current billing period.</p>
                 <p>We're sorry to see you go. If this was a mistake, you can resubscribe at any time.</p>
                 """.formatted(username);
+        send(toEmail, subject, html);
+    }
+
+    /**
+     * Weekly financial summary email.
+     * Sent every Monday for the prior 7 days of activity.
+     */
+    @Async
+    public void sendWeeklyReport(String toEmail, String username,
+                                 BigDecimal income, BigDecimal expenses, BigDecimal net,
+                                 double savingsRate, String topCategory,
+                                 String periodStart, String periodEnd,
+                                 String currency) {
+        String subject = "Your weekly finance summary — " + periodEnd;
+        String netColor  = net.compareTo(BigDecimal.ZERO) >= 0 ? "#16a34a" : "#dc2626";
+        String netSign   = net.compareTo(BigDecimal.ZERO) >= 0 ? "+" : "";
+        String rateStr   = String.format("%.1f", savingsRate);
+
+        String html = """
+                <div style="font-family:sans-serif;max-width:520px;margin:auto;padding:24px;background:#f9fafb;border-radius:12px;">
+                    <h2 style="color:#4f46e5;margin-top:0;">Weekly Finance Summary</h2>
+                    <p style="color:#6b7280;">Hi <strong>%s</strong> — here's how you did from %s to %s.</p>
+                    <table style="width:100%%;border-collapse:collapse;margin:16px 0;">
+                        <tr style="background:#fff;border-radius:8px;">
+                            <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+                                <span style="color:#6b7280;font-size:0.85rem;">Total Income</span><br>
+                                <strong style="font-size:1.25rem;color:#16a34a;">%s %,.2f</strong>
+                            </td>
+                        </tr>
+                        <tr style="background:#fff;">
+                            <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+                                <span style="color:#6b7280;font-size:0.85rem;">Total Expenses</span><br>
+                                <strong style="font-size:1.25rem;color:#dc2626;">%s %,.2f</strong>
+                            </td>
+                        </tr>
+                        <tr style="background:#fff;">
+                            <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+                                <span style="color:#6b7280;font-size:0.85rem;">Net Flow</span><br>
+                                <strong style="font-size:1.25rem;color:%s;">%s%s %,.2f</strong>
+                            </td>
+                        </tr>
+                        <tr style="background:#fff;">
+                            <td style="padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+                                <span style="color:#6b7280;font-size:0.85rem;">Savings Rate</span><br>
+                                <strong style="font-size:1.25rem;">%s%%</strong>
+                            </td>
+                        </tr>
+                        <tr style="background:#fff;">
+                            <td style="padding:12px 16px;">
+                                <span style="color:#6b7280;font-size:0.85rem;">Top Spending Category</span><br>
+                                <strong style="font-size:1.1rem;">%s</strong>
+                            </td>
+                        </tr>
+                    </table>
+                    <a href="%s/analytics" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-weight:600;">
+                        View Full Analytics →
+                    </a>
+                    <p style="color:#9ca3af;font-size:0.75rem;margin-top:20px;">
+                        You're receiving this because you have an account at Smart Finance Dashboard.
+                    </p>
+                </div>
+                """.formatted(
+                username, periodStart, periodEnd,
+                currency, income,
+                currency, expenses,
+                netColor, netSign, currency, net,
+                rateStr,
+                topCategory,
+                frontendUrl);
+
         send(toEmail, subject, html);
     }
 

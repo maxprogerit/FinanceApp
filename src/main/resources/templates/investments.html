@@ -40,7 +40,12 @@
     <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center mb-6">
             <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Investment Portfolio</h2>
-            <button onclick="openInvestmentModal()" class="btn-primary">+ Add Investment</button>
+            <div class="flex gap-3">
+                <button id="refreshBtn" class="btn-secondary" title="Fetch live market prices">
+                    ↻ Refresh Prices
+                </button>
+                <button onclick="openInvestmentModal()" class="btn-primary">+ Add Investment</button>
+            </div>
         </div>
 
         <!-- Portfolio Summary -->
@@ -76,22 +81,23 @@
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Holdings</h3>
             <div class="overflow-x-auto">
                 <table class="w-full text-sm">
-                    <thead>
-                        <tr class="border-b border-gray-200 dark:border-gray-700">
-                            <th class="text-left py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Symbol</th>
+                    <thead id="investmentTableHead">
+                        <tr class="border-b border-gray-200 dark:border-gray-700 select-none">
+                            <th data-sort="symbol" class="sortable text-left py-3 px-2 text-gray-600 dark:text-gray-400 font-medium cursor-pointer hover:text-gray-900 dark:hover:text-white">Symbol ↕</th>
                             <th class="text-left py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Name</th>
                             <th class="text-left py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Type</th>
                             <th class="text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Shares</th>
                             <th class="text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Avg Cost</th>
-                            <th class="text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Current Price</th>
-                            <th class="text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Value</th>
-                            <th class="text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Gain/Loss</th>
+                            <th class="text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Current</th>
+                            <th data-sort="value" class="sortable text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium cursor-pointer hover:text-gray-900 dark:hover:text-white">Value ↕</th>
+                            <th data-sort="profit" class="sortable text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium cursor-pointer hover:text-gray-900 dark:hover:text-white">Gain/Loss ↕</th>
+                            <th data-sort="profitPct" class="sortable text-right py-3 px-2 text-gray-600 dark:text-gray-400 font-medium cursor-pointer hover:text-gray-900 dark:hover:text-white">% Change ↕</th>
                             <th class="text-center py-3 px-2 text-gray-600 dark:text-gray-400 font-medium">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="investmentTableBody">
                         <tr>
-                            <td colspan="9" class="text-center py-8 text-gray-500 dark:text-gray-400">No investments yet. Add your first holding.</td>
+                            <td colspan="10" class="text-center py-8 text-gray-500 dark:text-gray-400">No investments yet. Add your first holding.</td>
                         </tr>
                     </tbody>
                 </table>
@@ -147,7 +153,7 @@
     </div>
 
     <script src="/js/theme.js"></script>
-    <script src="/js/app.js"></script>
-    <script src="/js/investments.js"></script>
+    <script type="module" src="/js/main.js"></script>
+    <script type="module" src="/js/features/investments.js"></script>
 </body>
 </html>

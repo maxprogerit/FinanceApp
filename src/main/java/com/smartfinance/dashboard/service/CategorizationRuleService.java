@@ -5,15 +5,27 @@ import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.repository.CategorizationRuleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
 public class CategorizationRuleService {
 
     private final CategorizationRuleRepository ruleRepository;
+
+    /**
+     * In-memory correction tracker.
+     * Key: {@code userId|keyword|category} — Value: correction count.
+     * Resets on restart (intentional — heuristic data, not critical state).
+     */
+    private final ConcurrentHashMap<String, Integer> correctionTracker = new ConcurrentHashMap<>();
+
+    /** Number of manual corrections before a rule is created automatically. */
+    private static final int AUTO_LEARN_THRESHOLD = 3;
 
     public List<CategorizationRule> findAll(User user) {
         return ruleRepository.findByUserOrderByPriorityDesc(user);
@@ -55,5 +67,61 @@ public class CategorizationRuleService {
                 .map(CategorizationRule::getCategory)
                 .findFirst()
                 .orElse("Other");
+    }
+
+    /**
+     * Tracks a manual category correction and automatically creates a categorization rule
+     * once the same merchant/keyword has been corrected {@link #AUTO_LEARN_THRESHOLD} times.
+     *
+     * <p>This is called by {@code TransactionService.updateTransaction()} when the user
+     * edits a transaction's category.  It is a Pro feature — the caller is responsible
+     * for checking plan access before surfacing the outcome to the user.  The method is safe
+     * to call for all users; it simply creates rules silently when the threshold is reached.
+     *
+     * @param description The transaction description (merchant name, note, etc.).
+     * @param category    The category the user has assigned.
+     * @param user        The transaction owner.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void maybeAutoLearn(String description, String category, User user) {
+        String keyword = extractKeyword(description);
+        if (keyword == null || keyword.length() < 3) return;
+
+        String key   = user.getId() + "|" + keyword + "|" + category;
+        int    count = correctionTracker.merge(key, 1, Integer::sum);
+
+        if (count < AUTO_LEARN_THRESHOLD) return;
+
+        // Only create the rule if one doesn't already exist for this pattern
+        boolean ruleExists = ruleRepository.findByUserOrderByPriorityDesc(user).stream()
+                .anyMatch(r -> r.getPattern().equalsIgnoreCase(keyword)
+                        && r.getCategory().equals(category));
+
+        if (!ruleExists) {
+            CategorizationRule rule = new CategorizationRule();
+            rule.setUser(user);
+            rule.setPattern(keyword);
+            rule.setCategory(category);
+            rule.setPriority(50); // medium priority so user rules can override
+            ruleRepository.save(rule);
+        }
+
+        // Reset counter regardless — avoids re-triggering on every subsequent edit
+        correctionTracker.remove(key);
+    }
+
+    // ── Private helpers ────────────────────────────────────────────────────────
+
+    /**
+     * Extracts the best single keyword from a description to use as a rule pattern.
+     * Returns the first word longer than 3 characters, or the entire trimmed string.
+     */
+    private String extractKeyword(String description) {
+        if (description == null || description.isBlank()) return null;
+        for (String word : description.toLowerCase().split("[\\s,.'\"\\-]+")) {
+            String w = word.trim();
+            if (w.length() > 3) return w;
+        }
+        return description.toLowerCase().trim();
     }
 }
