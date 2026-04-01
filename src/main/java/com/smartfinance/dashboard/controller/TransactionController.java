@@ -191,7 +191,7 @@ public class TransactionController {
             ));
         }
         String currency = user.getBaseCurrency() != null ? user.getBaseCurrency() : "USD";
-        return ResponseEntity.ok(ocrService.processReceipt(image, currency));
+        return ResponseEntity.ok(ocrService.processReceipt(image, currency, user));
     }
 
     // ── Auto-detect from bank notification (PRO+) ────────────────────────────

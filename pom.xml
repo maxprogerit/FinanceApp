@@ -139,6 +139,13 @@
             <version>${stripe.version}</version>
         </dependency>
 
+        <!-- Tess4J — Tesseract OCR Java API (bundles native Tesseract for Windows via JNA) -->
+        <dependency>
+            <groupId>net.sourceforge.tess4j</groupId>
+            <artifactId>tess4j</artifactId>
+            <version>5.8.0</version>
+        </dependency>
+
         <!-- Spring Boot Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

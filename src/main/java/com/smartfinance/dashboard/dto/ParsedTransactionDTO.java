@@ -12,6 +12,7 @@ import java.math.BigDecimal;
  * @param description     Merchant name or cleaned description text.
  * @param currency        Detected ISO 4217 currency code.
  * @param transactionDate ISO-8601 string (nullable — caller defaults to now).
+ * @param confidenceScore 0–100 estimate of extraction confidence (0 = unknown / not applicable).
  */
 public record ParsedTransactionDTO(
         BigDecimal amount,
@@ -19,5 +20,6 @@ public record ParsedTransactionDTO(
         String category,
         String description,
         String currency,
-        String transactionDate
+        String transactionDate,
+        int confidenceScore
 ) {}

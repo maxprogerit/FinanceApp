@@ -155,7 +155,7 @@ public class TextParserService {
         String     type   = resolveType(amountStr, rest);
         String     cat    = categorizeText(rest);
 
-        return new ParsedTransactionDTO(amount, type, cat, rest.isBlank() ? null : rest, defaultCurrency, null);
+        return new ParsedTransactionDTO(amount, type, cat, rest.isBlank() ? null : rest, defaultCurrency, null, 90);
     }
 
     /**
@@ -200,7 +200,7 @@ public class TextParserService {
         String description = merchant != null ? merchant : text;
         String category    = categorizeText(description);
 
-        return new ParsedTransactionDTO(amount, type, category, description, currency, null);
+        return new ParsedTransactionDTO(amount, type, category, description, currency, null, 85);
     }
 
     /**
@@ -232,7 +232,7 @@ public class TextParserService {
     public ParsedTransactionDTO parseReceiptText(String text, String defaultCurrency) {
         if (text == null || text.isBlank()) {
             return new ParsedTransactionDTO(BigDecimal.ZERO, "EXPENSE", "Other",
-                    "Receipt — please fill in details", defaultCurrency, null);
+                    "Receipt — please fill in details", defaultCurrency, null, 0);
         }
 
         String[] lines = Arrays.stream(text.split("\\n"))
@@ -310,7 +310,7 @@ public class TextParserService {
         String description = merchant != null ? merchant : "Receipt";
         String category    = categorizeText(description);
 
-        return new ParsedTransactionDTO(amount, "EXPENSE", category, description, currency, null);
+        return new ParsedTransactionDTO(amount, "EXPENSE", category, description, currency, null, 50);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
