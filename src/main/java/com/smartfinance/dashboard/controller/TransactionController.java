@@ -165,7 +165,7 @@ public class TransactionController {
         if (input == null || input.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "text is required"));
         }
-        String currency = user.getBaseCurrency() != null ? user.getBaseCurrency() : "USD";
+        String currency = user.getBaseCurrency() != null && !user.getBaseCurrency().isBlank() ? user.getBaseCurrency() : "EUR";
         ParsedTransactionDTO parsed = textParserService.parseSimpleInput(input, currency);
         if (parsed == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Could not parse input"));
@@ -190,7 +190,7 @@ public class TransactionController {
                     "upgradeUrl", "/settings"
             ));
         }
-        String currency = user.getBaseCurrency() != null ? user.getBaseCurrency() : "USD";
+        String currency = user.getBaseCurrency() != null && !user.getBaseCurrency().isBlank() ? user.getBaseCurrency() : "EUR";
         return ResponseEntity.ok(ocrService.processReceipt(image, currency, user));
     }
 
@@ -217,7 +217,7 @@ public class TransactionController {
         if (rawText == null || rawText.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "rawText is required"));
         }
-        String currency = user.getBaseCurrency() != null ? user.getBaseCurrency() : "USD";
+        String currency = user.getBaseCurrency() != null && !user.getBaseCurrency().isBlank() ? user.getBaseCurrency() : "EUR";
         return ResponseEntity.ok(textParserService.parseBankNotification(rawText, currency));
     }
 

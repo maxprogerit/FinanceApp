@@ -51,7 +51,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         admin.setPassword(passwordEncoder.encode("admin123456"));
         admin.setRole("ADMIN");
         admin.setEmailVerified(true);
-        admin.setBaseCurrency("USD");
+        admin.setBaseCurrency("EUR");
         admin.setTheme("light");
         admin.setBio("Platform administrator.");
         userRepository.save(admin);

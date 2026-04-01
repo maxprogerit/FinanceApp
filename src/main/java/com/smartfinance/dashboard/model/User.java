@@ -26,7 +26,7 @@ public class User {
 
     private String role = "USER";
 
-    private String baseCurrency = "USD";
+    private String baseCurrency = "EUR";
 
     private String theme = "light";
 
