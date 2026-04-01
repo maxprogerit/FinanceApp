@@ -332,7 +332,7 @@ function openAddModal() {
     if (prefs.lastStorage)  setSelectValue('storageType', prefs.lastStorage);
 
     // Default currency to user's base currency (from settings)
-    const baseCurrency = getCurrentUser()?.baseCurrency || getCurrentCurrency() || 'USD';
+    const baseCurrency = getCurrentUser()?.baseCurrency || getCurrentCurrency() || 'EUR';
     setSelectValue('currency', baseCurrency);
 
     // Default date to now
@@ -359,7 +359,7 @@ async function openEditModal(id) {
 
         document.getElementById('type').value        = t.type        || 'EXPENSE';
         document.getElementById('amount').value      = t.amount      || '';
-        setSelectValue('currency', t.currency || getCurrentUser()?.baseCurrency || 'USD');
+        setSelectValue('currency', t.currency || getCurrentUser()?.baseCurrency || 'EUR');
         setSelectValue('category', t.category        || '');
         setSelectValue('storageType', t.storageType  || '');
         setSelectValue('incomeSource', t.incomeSource|| '');

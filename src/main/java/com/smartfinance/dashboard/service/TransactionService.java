@@ -25,6 +25,10 @@ public class TransactionService {
     @Transactional
     public Transaction createTransaction(Transaction transaction, User user) {
         transaction.setUser(user);
+        if (transaction.getCurrency() == null || transaction.getCurrency().isBlank()) {
+            String base = user.getBaseCurrency();
+            transaction.setCurrency((base != null && !base.isBlank()) ? base : "EUR");
+        }
         Transaction saved = transactionRepository.save(transaction);
         if ("EXPENSE".equals(transaction.getType())) {
             budgetService.updateBudgetSpending(
@@ -41,7 +45,8 @@ public class TransactionService {
     @Transactional
     public Transaction quickAdd(QuickAddDTO dto, User user) {
         String type     = dto.type()   != null ? dto.type().toUpperCase() : "EXPENSE";
-        String currency = user.getBaseCurrency() != null ? user.getBaseCurrency() : "USD";
+        String base     = user.getBaseCurrency();
+        String currency = (base != null && !base.isBlank()) ? base : "EUR";
 
         String category = (dto.category() != null && !dto.category().isBlank())
                 ? dto.category()

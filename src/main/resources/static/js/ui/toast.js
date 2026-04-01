@@ -15,8 +15,11 @@ export function toast(message, type = 'info', duration = 3500) {
     const icons     = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
     const container = document.getElementById('toast-container');
     if (!container) return null;
+    // Limit to 3 visible toasts — evict oldest first
+    const visible = container.querySelectorAll('.toast:not(.toast-out)');
+    if (visible.length >= 3) dismissToast(visible[0]);
     const el = document.createElement('div');
-    el.className = `toast toast-${type} fade-in`;
+    el.className = `toast toast-${type}`;
     el.innerHTML = `<span>${icons[type] ?? 'ℹ️'}</span><span>${message}</span>`;
     el.addEventListener('click', () => dismissToast(el));
     container.appendChild(el);
@@ -25,9 +28,11 @@ export function toast(message, type = 'info', duration = 3500) {
 }
 
 export function dismissToast(el) {
-    if (!el || el.classList.contains('hiding')) return;
-    el.classList.add('hiding');
-    el.addEventListener('animationend', () => el.remove(), { once: true });
+    if (!el || el.classList.contains('toast-out')) return;
+    el.classList.add('toast-out');
+    const cleanup = () => { if (el.parentNode) el.remove(); };
+    el.addEventListener('animationend', cleanup, { once: true });
+    setTimeout(cleanup, 400);
 }
 
 export const showSuccess = (msg) => toast(msg, 'success');
