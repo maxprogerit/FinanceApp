@@ -1,295 +1,204 @@
 package com.smartfinance.dashboard.service;
 
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import net.sourceforge.tess4j.ITesseract;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import jakarta.annotation.PostConstruct;
-
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.*;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Extracts raw text from a receipt image using Tesseract OCR.
+ * Runs Tesseract OCR on a receipt image.
  *
- * <h3>Engine selection:</h3>
+ * <h3>Strategy:</h3>
  * <ol>
- *   <li>Tess4J (JAR-based Java binding) — preferred; requires {@link #tessdataPath}
- *       to point to the directory that <em>contains</em> a {@code tessdata/} sub-folder,
- *       e.g. {@code C:/Program Files/Tesseract-OCR}.</li>
- *   <li>System CLI fallback — used automatically when Tess4J cannot initialise
- *       (missing native library or missing tessdata). Uses {@link #tesseractPath}.</li>
+ *   <li>Preprocess the image (grayscale → blur → Otsu → upscale)</li>
+ *   <li>Try Tess4J with PSM 6 (single block) + OEM 3 (default)</li>
+ *   <li>If quality looks low, retry with PSM 4 (single column)</li>
+ *   <li>Fall back to the Tesseract CLI if Tess4J fails entirely</li>
  * </ol>
  *
- * <h3>PSM strategy:</h3>
- * <ul>
- *   <li>First attempt: PSM 4 (single-column, variable-size text) — good for most receipts.</li>
- *   <li>Auto-fallback to PSM 6 (single uniform block) if the first attempt returns fewer
- *       than {@value #MIN_QUALITY_CHARS} alphabetic characters.</li>
- * </ul>
- *
- * <h3>Required application.properties:</h3>
- * <pre>
- * app.ocr.tesseract-path=tesseract          # path to cli exe, or "tesseract" if on PATH
- * app.ocr.tessdata-path=                    # parent of tessdata/ dir; blank = auto-detect
- * app.ocr.language=eng                      # Tesseract lang code(s), e.g. "eng+srp"
- * </pre>
+ * <p>Tess4J's {@link Tesseract} is <em>not</em> thread-safe — a new instance is created
+ * for every call.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReceiptOcrService {
 
-    /** Minimum alphabetic characters in OCR output before quality is considered acceptable. */
-    private static final int MIN_QUALITY_CHARS = 20;
-
-    private final ImagePreprocessingService preprocessingService;
-
-    @Value("${app.ocr.tesseract-path:tesseract}")
-    private String tesseractPath;
-
-    /** Parent directory of the {@code tessdata/} folder. Blank → auto-detected. */
-    @Value("${app.ocr.tessdata-path:}")
+    @Value("${app.ocr.tessdata-path:#{null}}")
     private String tessdataPath;
 
+    @Value("${app.ocr.tesseract-path:tesseract}")
+    private String tesseractExe;
+
     @Value("${app.ocr.language:eng}")
-    private String ocrLanguage;
+    private String language;
 
-    // ── Init ──────────────────────────────────────────────────────────────────
+    private final ImagePreprocessingService imagePreprocessingService;
 
-    /**
-     * Called once at bean creation.
-     *
-     * <h3>Critical: JNA charset fix</h3>
-     * Tess4J calls the native {@code TessBaseAPIGetUTF8Text()} via JNA.
-     * On Windows, JNA defaults to the system charset (CP1250/CP1252) for
-     * all string conversions. Tesseract always outputs UTF-8 bytes for
-     * Cyrillic/non-ASCII text. Without this property, JNA misinterprets those
-     * bytes → mojibake like {@code ╧ЁхфєчхЮх} instead of {@code Предузеће}.
-     */
     @PostConstruct
-    private void init() {
-        System.setProperty("jna.encoding", StandardCharsets.UTF_8.name());
-        log.info("OCR service ready — language='{}' tessdata='{}'", ocrLanguage, resolveDatapath());
+    void init() {
+        // Required for Tess4J to handle non-ASCII (Cyrillic) output correctly on Windows
+        System.setProperty("jna.encoding", "UTF-8");
         validateTessdata();
     }
 
-    private void validateTessdata() {
-        String datapath = resolveDatapath();
-        if (datapath == null) {
-            log.warn("Tessdata directory not found — OCR will likely fail. "
-                    + "Set app.ocr.tessdata-path in application.properties.");
-            return;
-        }
-        for (String lang : ocrLanguage.split("\\+")) {
-            lang = lang.trim();
-            File f = new File(datapath, lang + ".traineddata");
-            if (f.exists()) {
-                log.info("  tessdata OK : {}", f.getName());
-            } else {
-                log.warn("  tessdata MISSING: {} — OCR quality will be degraded for '{}' language. "
-                        + "Download from https://github.com/tesseract-ocr/tessdata", f.getAbsolutePath(), lang);
-            }
-        }
-    }
-
-    // ── Public API ─────────────────────────────────────────────────────────────
+    // ── Public API ────────────────────────────────────────────────────────────
 
     /**
-     * Preprocesses the uploaded image and runs Tesseract OCR.
+     * Extracts text from a receipt image using Tesseract OCR.
      *
-     * @param image Uploaded receipt image (JPEG, PNG, BMP, TIFF, …).
-     * @return Raw OCR text (may be empty if nothing was detected).
-     * @throws RuntimeException on unrecoverable errors.
+     * @param file Uploaded image (JPG, PNG, etc.).
+     * @return OCR text, or empty string on failure.
      */
-    public String extractText(MultipartFile image) {
-        if (image == null || image.isEmpty()) {
-            throw new RuntimeException("No image provided.");
+    public String extractText(MultipartFile file) {
+        BufferedImage original;
+        try {
+            original = ImageIO.read(file.getInputStream());
+        } catch (IOException e) {
+            log.error("Cannot read image file '{}': {}", file.getOriginalFilename(), e.getMessage());
+            return "";
         }
+
+        if (original == null) {
+            log.warn("ImageIO could not decode '{}' — unsupported format?", file.getOriginalFilename());
+            return runCliOcr(file);
+        }
+
+        BufferedImage capped    = imagePreprocessingService.capSize(original);
+        BufferedImage processed = imagePreprocessingService.preprocess(capped);
 
         try {
-            BufferedImage raw = ImageIO.read(image.getInputStream());
-            if (raw == null) {
-                throw new RuntimeException("Cannot decode image — unsupported format or corrupted file.");
+            // Primary: PSM 6 — treat image as single uniform block of text
+            String text = runTess4j(processed, 6);
+
+            if (isLowQuality(text)) {
+                log.debug("PSM 6 result looks low-quality, retrying with PSM 4");
+                String alt = runTess4j(processed, 4);
+                if (!isLowQuality(alt)) text = alt;
             }
 
-            // Cap huge images before preprocessing
-            raw = preprocessingService.capSize(raw);
+            return text;
 
-            BufferedImage processed = preprocessingService.preprocess(raw);
-
-            // Try Tess4J first; fall back to CLI on failure
-            try {
-                return runTess4J(processed);
-            } catch (Throwable e) {
-                // Catches both Exception and native JNA errors (java.lang.Error: Invalid memory access)
-                log.warn("Tess4J failed ({}), falling back to CLI: {}", e.getClass().getSimpleName(), e.getMessage());
-                return runCli(image);
-            }
-
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to read uploaded image: " + e.getMessage(), e);
+        } catch (Exception e) {
+            log.warn("Tess4J failed ({}), falling back to CLI", e.getMessage());
+            return runCliOcr(file);
         }
     }
 
-    // ── Tess4J engine ─────────────────────────────────────────────────────────
+    // ── Private: Tess4J ───────────────────────────────────────────────────────
 
-    private String runTess4J(BufferedImage processed) throws TesseractException {
-        String datapath = resolveDatapath();
+    private String runTess4j(BufferedImage image, int psm) throws TesseractException {
+        Tesseract tess = new Tesseract();
 
-        // PSM 4 — single column (best for receipts with narrow column layout)
-        String result = doOcr(processed, datapath, 4);
-
-        if (isLowQuality(result)) {
-            log.debug("PSM 4 quality low ({}), retrying with PSM 6", qualityScore(result));
-            String fallback = doOcr(processed, datapath, 6);
-            result = qualityScore(fallback) >= qualityScore(result) ? fallback : result;
+        if (tessdataPath != null && !tessdataPath.isBlank()) {
+            tess.setDatapath(tessdataPath);
         }
 
-        log.debug("Tess4J OCR output ({} chars):\n{}",
-                result.length(), result.length() > 500 ? result.substring(0, 500) + "…" : result);
-        return result;
-    }
-
-    private String doOcr(BufferedImage image, String datapath, int psm) throws TesseractException {
-        ITesseract tess = new Tesseract();
-
-        if (datapath != null && !datapath.isBlank()) {
-            tess.setDatapath(datapath);
-        }
-
-        tess.setLanguage(ocrLanguage);
+        tess.setLanguage(language);
+        tess.setOcrEngineMode(3);     // OEM_DEFAULT — LSTM + legacy
         tess.setPageSegMode(psm);
 
-        // Force 300 DPI; preserve word spacing so multi-word merchants survive
-        tess.setVariable("user_defined_dpi", "300");
-        tess.setVariable("preserve_interword_spaces", "1");
-        // No char whitelist — allow Cyrillic so Serbian receipts are fully OCR'd
-
-        return tess.doOCR(image);
+        String text = tess.doOCR(image);
+        log.debug("Tess4J PSM={} → {} chars", psm, text == null ? 0 : text.length());
+        return text == null ? "" : text;
     }
 
-    // ── CLI fallback ──────────────────────────────────────────────────────────
+    // ── Private: CLI fallback ─────────────────────────────────────────────────
 
-    private String runCli(MultipartFile image) {
-        Path tempInput  = null;
-        Path tempOutBase = null;
+    private String runCliOcr(MultipartFile file) {
+        Path tmpInput  = null;
+        Path tmpOutput = null;
         try {
-            String suffix = getExtension(image.getOriginalFilename());
-            tempInput   = Files.createTempFile("receipt_in_", suffix);
-            tempOutBase = Files.createTempFile("receipt_out_", "");
-            Files.write(tempInput, image.getBytes());
+            String ext   = fileExtension(file.getOriginalFilename());
+            tmpInput     = Files.createTempFile("receipt_in_",  "." + ext);
+            tmpOutput    = Files.createTempFile("receipt_out_", "");
 
-            // PSM 4 first
-            String result = execCli(tempInput, tempOutBase, 4);
-            if (isLowQuality(result)) {
-                Files.deleteIfExists(Path.of(tempOutBase + ".txt"));
-                String fallback = execCli(tempInput, tempOutBase, 6);
-                if (qualityScore(fallback) >= qualityScore(result)) result = fallback;
+            Files.write(tmpInput, file.getBytes());
+
+            List<String> cmd = new ArrayList<>();
+            cmd.add(tesseractExe);
+            cmd.add(tmpInput.toString());
+            cmd.add(tmpOutput.toString());
+            cmd.add("-l");     cmd.add(language);
+            cmd.add("--oem"); cmd.add("3");
+            cmd.add("--psm"); cmd.add("6");
+
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            int exit = pb.start().waitFor();
+            log.debug("Tesseract CLI exited with {}", exit);
+
+            Path txtFile = Paths.get(tmpOutput + ".txt");
+            if (Files.exists(txtFile)) {
+                String result = Files.readString(txtFile);
+                log.debug("CLI OCR → {} chars", result.length());
+                return result;
             }
+            log.warn("Tesseract CLI produced no output file");
+            return "";
 
-            log.debug("CLI OCR output ({} chars)", result.length());
-            return result;
-
-        } catch (IOException e) {
-            String msg = e.getMessage() != null ? e.getMessage() : "";
-            if (msg.contains("No such file") || msg.contains("cannot find") || msg.contains("error=2")) {
-                throw new RuntimeException(
-                    "Tesseract is not installed or not on PATH. " +
-                    "Install it from https://github.com/UB-Mannheim/tesseract/wiki " +
-                    "or set app.ocr.tesseract-path in application.properties.");
-            }
-            throw new RuntimeException("Failed to process receipt via CLI: " + msg, e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("OCR processing was interrupted.");
+        } catch (Exception e) {
+            log.error("CLI OCR fallback failed: {}", e.getMessage());
+            return "";
         } finally {
-            silentDelete(tempInput);
-            silentDelete(tempOutBase);
+            safeDelete(tmpInput);
+            if (tmpOutput != null) {
+                safeDelete(tmpOutput);
+                safeDelete(Paths.get(tmpOutput + ".txt"));
+            }
         }
     }
 
-    private String execCli(Path input, Path outBase, int psm)
-            throws IOException, InterruptedException {
-        ProcessBuilder pb = new ProcessBuilder(List.of(
-                tesseractPath,
-                input.toString(),
-                outBase.toString(),
-                "--psm", String.valueOf(psm),
-                "-l", ocrLanguage
-        ));
-        pb.redirectErrorStream(true);
-        Process proc = pb.start();
-        String log = new String(proc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        int exitCode = proc.waitFor();
-
-        if (exitCode != 0) {
-            throw new RuntimeException("Tesseract CLI exit code " + exitCode +
-                    (log.isBlank() ? "" : ": " + log.trim()));
-        }
-
-        Path txt = Path.of(outBase + ".txt");
-        String text = Files.exists(txt) ? Files.readString(txt, StandardCharsets.UTF_8) : "";
-        Files.deleteIfExists(txt);
-        return text;
-    }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ── Private: helpers ──────────────────────────────────────────────────────
 
     /**
-     * Resolves the Tess4J datapath — the directory that directly contains {@code .traineddata} files.
-     * Tess4J's {@code setDatapath()} maps directly to Tesseract's {@code datapath} argument,
-     * which expects the folder holding {@code eng.traineddata} etc. (i.e. the {@code tessdata/} dir).
-     *
-     * Priority: explicit {@code app.ocr.tessdata-path} → derived from exe path → Windows default.
+     * Heuristic: if fewer than 30 % of characters are alphanumeric the OCR pass
+     * likely produced garbage.
      */
-    private String resolveDatapath() {
-        if (tessdataPath != null && !tessdataPath.isBlank()) {
-            return tessdataPath;
+    private boolean isLowQuality(String text) {
+        if (text == null || text.isBlank()) return true;
+        long alphaNum = text.chars().filter(Character::isLetterOrDigit).count();
+        return (double) alphaNum / text.length() < 0.30;
+    }
+
+    private void validateTessdata() {
+        if (tessdataPath == null || tessdataPath.isBlank()) {
+            log.warn("app.ocr.tessdata-path not set — Tesseract will use its default path");
+            return;
         }
-        // Derive tessdata/ from the exe path (exe lives next to tessdata/)
-        if (tesseractPath != null && !tesseractPath.equals("tesseract")) {
-            File exe = new File(tesseractPath);
-            File parent = exe.getParentFile();
-            if (parent != null && parent.isDirectory()) {
-                File derived = new File(parent, "tessdata");
-                if (derived.isDirectory()) return derived.getAbsolutePath();
-                return parent.getAbsolutePath(); // fallback: hope it's already tessdata dir
+        Path dir = Paths.get(tessdataPath);
+        if (!Files.isDirectory(dir)) {
+            log.warn("Tessdata directory not found: {}", tessdataPath);
+            return;
+        }
+        for (String lang : language.split("\\+")) {
+            if (!Files.exists(dir.resolve(lang + ".traineddata"))) {
+                log.warn("Missing tessdata file: {}/{}.traineddata", tessdataPath, lang);
             }
         }
-        // Windows UB-Mannheim default install
-        File win = new File("C:/Program Files/Tesseract-OCR/tessdata");
-        if (win.isDirectory()) {
-            log.debug("Using Windows default tessdata path: {}", win.getAbsolutePath());
-            return win.getAbsolutePath();
-        }
-        return null;
     }
 
-    private boolean isLowQuality(String text) {
-        return qualityScore(text) < MIN_QUALITY_CHARS;
+    private static String fileExtension(String filename) {
+        if (filename == null) return "jpg";
+        int dot = filename.lastIndexOf('.');
+        return (dot >= 0) ? filename.substring(dot + 1) : "jpg";
     }
 
-    private long qualityScore(String text) {
-        if (text == null) return 0;
-        return text.chars().filter(Character::isLetter).count();
-    }
-
-    private String getExtension(String filename) {
-        if (filename == null || !filename.contains(".")) return ".jpg";
-        return filename.substring(filename.lastIndexOf('.'));
-    }
-
-    private void silentDelete(Path p) {
-        try { if (p != null) Files.deleteIfExists(p); } catch (IOException ignored) {}
+    private static void safeDelete(Path p) {
+        if (p == null) return;
+        try { Files.deleteIfExists(p); } catch (IOException ignored) {}
     }
 }
