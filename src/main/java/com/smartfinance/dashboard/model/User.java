@@ -26,6 +26,7 @@ public class User {
 
     private String role = "USER";
 
+    @Column(name = "base_currency", nullable = false)
     private String baseCurrency = "EUR";
 
     private String theme = "light";

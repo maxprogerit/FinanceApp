@@ -81,14 +81,15 @@ public class ReceiptOcrService {
         BufferedImage processed = imagePreprocessingService.preprocess(capped);
 
         try {
-            // Primary: PSM 6 — treat image as single uniform block of text
-            String text = runTess4j(processed, 6);
+            // Run PSM 4 (single column — best for thermal receipt paper) and
+            // PSM 6 (uniform block) in parallel; keep whichever extracts more text.
+            // This maximises line coverage without sacrificing quality.
+            String psm4 = runTess4j(processed, 4);
+            String psm6 = runTess4j(processed, 6);
 
-            if (isLowQuality(text)) {
-                log.debug("PSM 6 result looks low-quality, retrying with PSM 4");
-                String alt = runTess4j(processed, 4);
-                if (!isLowQuality(alt)) text = alt;
-            }
+            String text = psm4.length() >= psm6.length() ? psm4 : psm6;
+            log.debug("PSM4={} chars  PSM6={} chars  → using PSM{}",
+                    psm4.length(), psm6.length(), psm4.length() >= psm6.length() ? 4 : 6);
 
             return text;
 
