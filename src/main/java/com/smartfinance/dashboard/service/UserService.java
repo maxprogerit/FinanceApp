@@ -3,6 +3,7 @@ package com.smartfinance.dashboard.service;
 import com.smartfinance.dashboard.model.User;
 import com.smartfinance.dashboard.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -14,8 +15,10 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService implements UserDetailsService {
@@ -206,5 +209,29 @@ public class UserService implements UserDetailsService {
         user.setEmailVerified(true);
 
         return userRepository.save(user);
+    }
+
+    // ── Currency ──────────────────────────────────────────────────────────────
+
+    private static final Set<String> SUPPORTED_CURRENCIES = Set.of(
+            "USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "INR", "BRL", "RSD"
+    );
+
+    /**
+     * Updates the user's base currency (used for new transactions and UI display).
+     *
+     * @throws IllegalArgumentException if the currency code is not supported.
+     */
+    public void updateBaseCurrency(User user, String currency) {
+        if (currency == null || currency.isBlank()) {
+            throw new IllegalArgumentException("Currency code must not be blank");
+        }
+        String code = currency.trim().toUpperCase();
+        if (!SUPPORTED_CURRENCIES.contains(code)) {
+            throw new IllegalArgumentException("Unsupported currency: " + code);
+        }
+        user.setBaseCurrency(code);
+        userRepository.save(user);
+        log.info("User '{}' changed base currency to {}", user.getUsername(), code);
     }
 }

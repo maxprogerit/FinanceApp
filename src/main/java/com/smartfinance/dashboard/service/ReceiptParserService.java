@@ -59,8 +59,20 @@ public class ReceiptParserService {
             DateTimeFormatter.ofPattern("yyyyMMdd")
     );
 
-    private static final Pattern AMOUNT_PATTERN =
-            Pattern.compile("(?<![\\d.,])([1-9]\\d{0,5}(?:[.,]\\d{1,2})?)(?![\\d])");
+    /**
+     * European monetary format: {@code 1.250,00} or {@code 1.250} (dot = thousands separator)
+     * and plain comma-decimal {@code 1250,00}.
+     * This must be tried BEFORE the simple pattern to avoid extracting just "1" from "1.250,00".
+     */
+    private static final Pattern EUR_AMOUNT_PATTERN =
+            Pattern.compile("\\b(\\d{1,3}(?:\\.\\d{3})+(?:,\\d{2})?|\\d{1,6},\\d{2})\\b");
+
+    /**
+     * Simple format: integer or dot-decimal ({@code 1250} / {@code 1250.00}).
+     * Lookahead {@code (?![\\d.,])} prevents matching partial numbers like "1" from "1.250,00".
+     */
+    private static final Pattern SIMPLE_AMOUNT_PATTERN =
+            Pattern.compile("(?<![\\d.,])([1-9]\\d{0,5}(?:\\.\\d{2})?)(?![\\d.,])");
 
     private static final Pattern DATE_PATTERN =
             Pattern.compile("\\b(\\d{1,4}[./\\-]\\d{1,2}[./\\-]\\d{2,4})\\b");
@@ -138,13 +150,9 @@ public class ReceiptParserService {
             // Position bonus: bottom 40 % of receipt
             int posBonus = (i >= total * 0.60) ? 3 : 0;
 
-            Matcher m = AMOUNT_PATTERN.matcher(line);
-            while (m.find()) {
-                try {
-                    BigDecimal val = toBigDecimal(m.group(1));
-                    if (val.compareTo(BigDecimal.ONE) < 0) continue;
-                    candidates.add(new Candidate(val, kwBonus + posBonus));
-                } catch (NumberFormatException ignored) { /* skip malformed token */ }
+            for (BigDecimal val : extractAmountsFromLine(line)) {
+                if (val.compareTo(BigDecimal.ONE) < 0) continue;
+                candidates.add(new Candidate(val, kwBonus + posBonus));
             }
         }
 
@@ -199,6 +207,11 @@ public class ReceiptParserService {
             }
         }
 
+        // Strip leading store/receipt number prefix: "2 Idea Markoti" → "Idea Markoti"
+        if (best != null) {
+            best = best.replaceAll("^\\d{1,4}\\s+", "").trim();
+        }
+
         return best;
     }
 
@@ -231,14 +244,24 @@ public class ReceiptParserService {
         if (rawText.contains("€")) return "EUR";
         if (rawText.contains("£")) return "GBP";
 
-        // Serbian-context detection
-        if (normalized.contains(" дин") || normalized.contains("рсд")
-                || normalized.contains(" din") || normalized.contains("rsd")) return "RSD";
+        // Serbian-context detection — OCR may output lowercase, mixed case, or truncated forms
+        if (normalized.contains("дин") || normalized.contains("рсд")
+                || normalized.contains("din") || normalized.contains("rsd")) return "RSD";
 
         // Serbian fiscal receipt keywords → infer RSD
         if (normalized.contains("ukupno") || normalized.contains("укупно")
                 || normalized.contains("fiskal") || normalized.contains("пфр")
-                || normalized.contains("svega")) {
+                || normalized.contains("svega")  || normalized.contains("iznos")
+                || normalized.contains("pdv")) {   // PDV = Porez na dodatu vrednost (Serbian VAT)
+            return "RSD";
+        }
+
+        // Known Serbian grocery/retail store names on the receipt → infer RSD
+        if (normalized.contains("idea") || normalized.contains("maxi")
+                || normalized.contains("lidl") || normalized.contains("dis ")
+                || normalized.contains("roda") || normalized.contains("univerexport")
+                || normalized.contains("kaufland") || normalized.contains("mercator")
+                || normalized.contains("lilly") || normalized.contains("tempo")) {
             return "RSD";
         }
 
@@ -256,8 +279,50 @@ public class ReceiptParserService {
                 || lower.matches(".*qty\\s*:\\s*\\d+.*");
     }
 
-    private static BigDecimal toBigDecimal(String s) {
-        return new BigDecimal(s.replace(',', '.'));
+    /**
+     * Extracts all monetary amounts from a single receipt line.
+     *
+     * <p>Tries the European format ({@code 1.250,00}) first to avoid picking up just "1"
+     * from a thousands-separated number, then falls back to the simple format.
+     */
+    private List<BigDecimal> extractAmountsFromLine(String line) {
+        List<BigDecimal> results = new ArrayList<>();
+
+        // Pass 1 — European format (dot=thousands, comma=decimal): 1.250,00 or 1250,00
+        Matcher eur = EUR_AMOUNT_PATTERN.matcher(line);
+        while (eur.find()) {
+            try { results.add(parseEurAmount(eur.group(1))); }
+            catch (NumberFormatException ignored) {}
+        }
+
+        // Pass 2 — simple integer or US decimal (only when EUR found nothing on this line)
+        if (results.isEmpty()) {
+            Matcher simple = SIMPLE_AMOUNT_PATTERN.matcher(line);
+            while (simple.find()) {
+                try { results.add(new BigDecimal(simple.group(1))); }
+                catch (NumberFormatException ignored) {}
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Normalises a European-formatted monetary string to a {@link BigDecimal}.
+     * <ul>
+     *   <li>{@code 1.250,00} → 1250.00</li>
+     *   <li>{@code 1.250}    → 1250</li>
+     *   <li>{@code 1250,00}  → 1250.00</li>
+     * </ul>
+     */
+    private static BigDecimal parseEurAmount(String s) {
+        if (s.contains(",")) {
+            // Comma is the decimal separator; dots are thousands separators
+            return new BigDecimal(s.replace(".", "").replace(",", "."));
+        } else {
+            // No comma — dots are thousands separators only (e.g., "1.250")
+            return new BigDecimal(s.replace(".", ""));
+        }
     }
 
     private static String[] splitLines(String text) {

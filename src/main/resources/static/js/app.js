@@ -54,10 +54,15 @@ function formatCurrency(amount, storedCurrency = 'USD') {
     }
 }
 
-function setCurrency(code) {
+async function setCurrency(code) {
     currentCurrency = code;
     localStorage.setItem('currentCurrency', code);
+    window.currentCurrency = code;
     window.dispatchEvent(new CustomEvent('currencyChange', { detail: { currency: code } }));
+    // Persist to DB — non-blocking failure (localStorage is already updated)
+    try {
+        await apiPut('/user/currency', { currency: code });
+    } catch (_) { /* server unavailable — selection is still saved in localStorage */ }
 }
 
 async function fetchExchangeRates() {
@@ -250,7 +255,7 @@ function injectSidebar() {
     // Wire currency selector
     const currSel = document.getElementById('globalCurrencySelect');
     if (currSel) {
-        currSel.addEventListener('change', e => { setCurrency(e.target.value); location.reload(); });
+        currSel.addEventListener('change', async e => { await setCurrency(e.target.value); location.reload(); });
     }
 
     // Wire theme toggle (independent of theme.js which binds to the hidden nav's button)
@@ -535,23 +540,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     await fetchPlanState();
     injectUpgradeUI();
 
-    // Inject admin nav item for ADMIN role users
+    // Sync user preferences and inject role-specific nav items
     try {
         const me = await apiGet('/user/me');
-        if (me && me.role === 'ADMIN') {
-            const nav = document.querySelector('#app-sidebar .sidebar-nav');
-            if (nav && !nav.querySelector('a[href="/admin"]')) {
-                const a = document.createElement('a');
-                a.href = '/admin';
-                a.className = 'sidebar-nav-item' + (window.location.pathname === '/admin' ? ' active' : '');
-                a.innerHTML = `<span class="sidebar-nav-icon">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon-sm">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                    </svg>
-                </span>
-                <span class="sidebar-nav-label">Admin</span>`;
-                nav.appendChild(a);
+        if (me) {
+            // Server is the authoritative source for baseCurrency.
+            // Overwrite localStorage / currentCurrency without calling the API again.
+            if (me.baseCurrency && me.baseCurrency !== currentCurrency) {
+                currentCurrency = me.baseCurrency;
+                localStorage.setItem('currentCurrency', me.baseCurrency);
+                window.currentCurrency = me.baseCurrency;
+                const sel = document.getElementById('globalCurrencySelect');
+                if (sel) sel.value = me.baseCurrency;
+            }
+
+            if (me.role === 'ADMIN') {
+                const nav = document.querySelector('#app-sidebar .sidebar-nav');
+                if (nav && !nav.querySelector('a[href="/admin"]')) {
+                    const a = document.createElement('a');
+                    a.href = '/admin';
+                    a.className = 'sidebar-nav-item' + (window.location.pathname === '/admin' ? ' active' : '');
+                    a.innerHTML = `<span class="sidebar-nav-icon">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="icon-sm">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </span>
+                    <span class="sidebar-nav-label">Admin</span>`;
+                    nav.appendChild(a);
+                }
             }
         }
     } catch (_) { /* not admin or not logged in */ }
