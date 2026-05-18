@@ -9,6 +9,7 @@ import com.smartfinance.dashboard.service.OcrService;
 import com.smartfinance.dashboard.service.PlanAccessService;
 import com.smartfinance.dashboard.service.TextParserService;
 import com.smartfinance.dashboard.service.TransactionService;
+import com.smartfinance.dashboard.service.CategorizationRuleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -35,6 +36,7 @@ public class TransactionController {
     private final TextParserService    textParserService;
     private final OcrService           ocrService;
     private final PlanAccessService    planAccessService;
+    private final CategorizationRuleService categorizationRuleService;
     private final SecurityUtils        securityUtils;
 
     // ── Standard CRUD ─────────────────────────────────────────────────────────
@@ -170,6 +172,22 @@ public class TransactionController {
         if (parsed == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Could not parse input"));
         }
+        CategorizationRuleService.RuleMatch match =
+                categorizationRuleService.resolveRule(parsed.description(), null, user);
+        String category = parsed.category();
+        if (match.category() != null && !match.category().isBlank() && !"Other".equals(match.category())) {
+            category = match.category();
+        }
+        String type = match.transactionType() != null ? match.transactionType() : parsed.type();
+        parsed = new ParsedTransactionDTO(
+                parsed.amount(),
+                type,
+                category,
+                parsed.description(),
+                parsed.currency(),
+                parsed.transactionDate(),
+                parsed.confidenceScore()
+        );
         return ResponseEntity.ok(parsed);
     }
 
@@ -218,7 +236,24 @@ public class TransactionController {
             return ResponseEntity.badRequest().body(Map.of("error", "rawText is required"));
         }
         String currency = user.getBaseCurrency() != null && !user.getBaseCurrency().isBlank() ? user.getBaseCurrency() : "EUR";
-        return ResponseEntity.ok(textParserService.parseBankNotification(rawText, currency));
+        ParsedTransactionDTO parsed = textParserService.parseBankNotification(rawText, currency);
+        CategorizationRuleService.RuleMatch match =
+                categorizationRuleService.resolveRule(parsed.description(), null, user);
+        String category = parsed.category();
+        if (match.category() != null && !match.category().isBlank() && !"Other".equals(match.category())) {
+            category = match.category();
+        }
+        String type = match.transactionType() != null ? match.transactionType() : parsed.type();
+        parsed = new ParsedTransactionDTO(
+                parsed.amount(),
+                type,
+                category,
+                parsed.description(),
+                parsed.currency(),
+                parsed.transactionDate(),
+                parsed.confidenceScore()
+        );
+        return ResponseEntity.ok(parsed);
     }
 
     // ── Exception handler ─────────────────────────────────────────────────────

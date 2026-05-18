@@ -114,11 +114,13 @@ public class CsvImportService {
                     }
 
                     String currency = currencyStr.length() > 3 ? currencyStr.substring(0, 3) : currencyStr;
-                    String category = categorizationRuleService.applyRules(description, user);
+                    CategorizationRuleService.RuleMatch match = categorizationRuleService.resolveRule(description, null, user);
+                    String category = (match.category() != null && !match.category().isBlank()) ? match.category() : "Other";
+                    String resolvedType = match.transactionType() != null ? match.transactionType() : type;
 
                     Transaction tx = new Transaction();
                     tx.setUser(user);
-                    tx.setType(type);
+                    tx.setType(resolvedType);
                     tx.setAmount(amount);
                     tx.setCurrency(currency);
                     tx.setCategory(category);
@@ -128,7 +130,7 @@ public class CsvImportService {
 
                     transactionRepository.save(tx);
 
-                    if ("EXPENSE".equals(type)) {
+                    if ("EXPENSE".equals(resolvedType)) {
                         budgetService.updateBudgetSpending(category, amount, currency, user);
                     }
 

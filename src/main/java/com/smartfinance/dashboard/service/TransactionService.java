@@ -47,10 +47,18 @@ public class TransactionService {
         String type     = dto.type()   != null ? dto.type().toUpperCase() : "EXPENSE";
         String base     = user.getBaseCurrency();
         String currency = (base != null && !base.isBlank()) ? base : "EUR";
+        CategorizationRuleService.RuleMatch match = categorizationRuleService.resolveRule(dto.description(), null, user);
 
         String category = (dto.category() != null && !dto.category().isBlank())
                 ? dto.category()
-                : categorizationRuleService.applyRules(dto.description(), user);
+                : match.category();
+        if (category == null || category.isBlank()) {
+            category = "Other";
+        }
+
+        if (match.transactionType() != null) {
+            type = match.transactionType();
+        }
 
         Transaction t = new Transaction();
         t.setUser(user);

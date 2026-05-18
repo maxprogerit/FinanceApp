@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -26,6 +27,8 @@ public class CategorizationRuleService {
 
     /** Number of manual corrections before a rule is created automatically. */
     private static final int AUTO_LEARN_THRESHOLD = 3;
+
+    public record RuleMatch(String category, String transactionType) {}
 
     public List<CategorizationRule> findAll(User user) {
         return ruleRepository.findByUserOrderByPriorityDesc(user);
@@ -60,13 +63,43 @@ public class CategorizationRuleService {
      * or "Other" if no rule matches. Only considers rules belonging to the given user.
      */
     public String applyRules(String description, User user) {
-        if (description == null || description.isBlank()) return "Other";
+        return resolveRule(description, null, user).category();
+    }
+
+    /**
+     * Returns the category for the first matching rule with optional transaction-type context.
+     * If no rule matches, returns "Other".
+     */
+    public String applyRules(String description, String transactionType, User user) {
+        return resolveRule(description, transactionType, user).category();
+    }
+
+    /**
+     * Resolves the best matching rule and includes both category and transaction type.
+     * If no rule matches, category defaults to "Other" and transaction type remains the hinted one.
+     */
+    public RuleMatch resolveRule(String description, String transactionType, User user) {
+        String normalizedType = normalizeTransactionType(transactionType);
+        if (description == null || description.isBlank()) {
+            return new RuleMatch("Other", normalizedType);
+        }
+
         String lower = description.toLowerCase();
-        return ruleRepository.findByUserOrderByPriorityDesc(user).stream()
-                .filter(r -> lower.contains(r.getPattern().toLowerCase()))
-                .map(CategorizationRule::getCategory)
-                .findFirst()
-                .orElse("Other");
+        List<CategorizationRule> rules = ruleRepository.findByUserOrderByPriorityDesc(user);
+
+        Optional<CategorizationRule> matched = rules.stream()
+                .filter(r -> matchesPattern(r, lower))
+                .filter(r -> isTypeCompatible(normalizedType, normalizeTransactionType(r.getTransactionType())))
+                .findFirst();
+
+        if (matched.isEmpty()) {
+            return new RuleMatch("Other", normalizedType);
+        }
+
+        CategorizationRule rule = matched.get();
+        String resolvedType = normalizeTransactionType(rule.getTransactionType());
+        if (resolvedType == null) resolvedType = normalizedType;
+        return new RuleMatch(rule.getCategory(), resolvedType);
     }
 
     /**
@@ -123,5 +156,23 @@ public class CategorizationRuleService {
             if (w.length() > 3) return w;
         }
         return description.toLowerCase().trim();
+    }
+
+    private boolean matchesPattern(CategorizationRule rule, String lowerDescription) {
+        String pattern = rule.getPattern();
+        return pattern != null && !pattern.isBlank() && lowerDescription.contains(pattern.toLowerCase());
+    }
+
+    private boolean isTypeCompatible(String hintedType, String ruleType) {
+        return ruleType == null || hintedType == null || ruleType.equals(hintedType);
+    }
+
+    private String normalizeTransactionType(String type) {
+        if (type == null || type.isBlank()) return null;
+        String normalized = type.trim().toUpperCase();
+        if ("INCOME".equals(normalized) || "EXPENSE".equals(normalized)) {
+            return normalized;
+        }
+        return null;
     }
 }
