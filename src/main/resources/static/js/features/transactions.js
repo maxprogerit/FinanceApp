@@ -23,6 +23,7 @@ let categories      = [];   // Category objects {id, name, type, icon}
 let storageTypes    = [];   // {id, name, icon}
 let incomeSources   = [];   // {id, name, icon}
 let editingId       = null; // null = adding, number = editing
+const MAX_CATEGORY_SUGGESTIONS = 5;
 
 // ── Quick-Add text parser ─────────────────────────────────────────────────────
 
@@ -128,6 +129,43 @@ function parseQuickInput(input) {
     }
 
     return { amount, type, category: categorizeText(rest), description: rest || null };
+}
+
+function buildQuickInputWithCategory(input, category) {
+    const m = (input || '').trim().match(/^([+\-]?\d+(?:[.,]\d+)?)\s*(.*)$/);
+    if (!m) return category;
+    return `${m[1]} ${category}`;
+}
+
+function getCategorySuggestions(input) {
+    const m = (input || '').trim().match(/^([+\-]?\d+(?:[.,]\d+)?)\s*(.*)$/);
+    if (!m) return [];
+
+    const query = (m[2] || '').trim().toLowerCase();
+    if (query.length < 2) return [];
+
+    const uniqueCategoryNames = [...new Set(
+        categories
+            .filter(c => c?.isActive !== false && c?.name)
+            .map(c => c.name.trim())
+            .filter(Boolean)
+    )];
+
+    return uniqueCategoryNames
+        .map(name => {
+            const lower = name.toLowerCase();
+            let score = 0;
+            if (lower === query) score = 100;
+            else if (lower.startsWith(query)) score = 90;
+            else if (lower.includes(query)) score = 80;
+            else if (query.includes(lower)) score = 70;
+            else if (query.split(/\s+/).every(part => lower.includes(part))) score = 60;
+            return { name, score };
+        })
+        .filter(s => s.score > 0)
+        .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+        .slice(0, MAX_CATEGORY_SUGGESTIONS)
+        .map(s => s.name);
 }
 
 // ── Persistent preferences ────────────────────────────────────────────────────
@@ -276,14 +314,47 @@ function populateIncomeSourceDropdown(selectId) {
 
 function updateQuickHint(input) {
     const hint = document.getElementById('quickAddHint');
+    const suggestionsBox = document.getElementById('quickAddSuggestions');
     if (!hint) return;
-    if (!input.trim()) { hint.textContent = ''; return; }
+    if (!input.trim()) {
+        hint.textContent = '';
+        if (suggestionsBox) {
+            suggestionsBox.innerHTML = '';
+            suggestionsBox.classList.add('hidden');
+        }
+        return;
+    }
 
     const parsed = parseQuickInput(input);
-    if (!parsed) { hint.textContent = ''; return; }
+    if (!parsed) {
+        hint.textContent = '';
+        if (suggestionsBox) {
+            suggestionsBox.innerHTML = '';
+            suggestionsBox.classList.add('hidden');
+        }
+        return;
+    }
 
     hint.textContent = `${parsed.type === 'INCOME' ? '↑ Income' : '↓ Expense'} · ${parsed.category} · ${parsed.amount}`;
     hint.className = `text-xs mt-1 ${parsed.type === 'INCOME' ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`;
+
+    if (!suggestionsBox) return;
+    const suggestions = getCategorySuggestions(input);
+    suggestionsBox.innerHTML = '';
+    if (!suggestions.length) {
+        suggestionsBox.classList.add('hidden');
+        return;
+    }
+
+    suggestions.forEach(category => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.category = category;
+        button.className = 'text-xs px-2 py-1 rounded-full border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-gray-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/30';
+        button.textContent = category;
+        suggestionsBox.appendChild(button);
+    });
+    suggestionsBox.classList.remove('hidden');
 }
 
 async function handleQuickAdd(input) {
@@ -294,16 +365,23 @@ async function handleQuickAdd(input) {
     if (btn) { btn.disabled = true; btn.classList.add('btn-loading'); }
 
     try {
-        await apiPost('/transactions/quick', {
+        const saved = await apiPost('/transactions/quick', {
             amount:      parsed.amount,
             type:        parsed.type,
             category:    parsed.category !== 'Other' ? parsed.category : null,
             description: parsed.description,
         });
-        showSuccess(`${parsed.type === 'INCOME' ? 'Income' : 'Expense'} added (${parsed.category})`);
+        const resolvedType = saved?.type || parsed.type;
+        const resolvedCategory = saved?.category || parsed.category;
+        showSuccess(`${resolvedType === 'INCOME' ? 'Income' : 'Expense'} added (${resolvedCategory})`);
         document.getElementById('quickAddInput').value = '';
         document.getElementById('quickAddHint').textContent = '';
-        savePrefs({ lastCategory: parsed.category });
+        const suggestionsBox = document.getElementById('quickAddSuggestions');
+        if (suggestionsBox) {
+            suggestionsBox.innerHTML = '';
+            suggestionsBox.classList.add('hidden');
+        }
+        savePrefs({ lastCategory: resolvedCategory });
         await loadTransactions();
         renderCategoryFilter();
     } catch (err) {
@@ -541,6 +619,14 @@ function bindEvents() {
             if (e.key === 'Enter') { e.preventDefault(); handleQuickAdd(e.target.value); }
         });
     }
+    document.getElementById('quickAddSuggestions')?.addEventListener('click', e => {
+        const button = e.target.closest('button[data-category]');
+        if (!button || !quickInput) return;
+        quickInput.value = buildQuickInputWithCategory(quickInput.value, button.dataset.category);
+        updateQuickHint(quickInput.value);
+        quickInput.focus();
+        quickInput.setSelectionRange(quickInput.value.length, quickInput.value.length);
+    });
     document.getElementById('quickAddBtn')?.addEventListener('click', () => {
         handleQuickAdd(document.getElementById('quickAddInput')?.value || '');
     });

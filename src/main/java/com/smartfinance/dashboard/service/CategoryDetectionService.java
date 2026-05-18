@@ -42,7 +42,7 @@ public class CategoryDetectionService {
     public String detect(String merchant, String rawText, User user) {
         // 1 — user's DB rules against merchant name
         if (merchant != null && !merchant.isBlank()) {
-            String cat = categorizationRuleService.applyRules(merchant, user);
+            String cat = categorizationRuleService.applyRules(merchant, "EXPENSE", user);
             if (!"Other".equals(cat)) {
                 log.debug("Category '{}' matched by DB rule on merchant '{}'", cat, merchant);
                 return cat;
@@ -51,7 +51,7 @@ public class CategoryDetectionService {
 
         // 2 — user's DB rules against full OCR text
         if (rawText != null && !rawText.isBlank()) {
-            String cat = categorizationRuleService.applyRules(rawText, user);
+            String cat = categorizationRuleService.applyRules(rawText, "EXPENSE", user);
             if (!"Other".equals(cat)) {
                 log.debug("Category '{}' matched by DB rule on raw text", cat);
                 return cat;
