@@ -12,3 +12,14 @@ target/
 .project
 .classpath
 data/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+application-local.properties
+application-local.yml
